@@ -1,0 +1,2247 @@
+﻿#region _stringFormat
+
+/*
+0    "General"
+1    "0"
+2    "0.00"
+3    "#,##0"
+4    "#,##0.00"
+5    "\"$\"#,##0_);(\"$\"#,##0)"                                                 - currency                  #,##0
+6    "\"$\"#,##0_);[Red](\"$\"#,##0)"                                            - currency red if < 0       #,##0
+7    "\"$\"#,##0.00_);(\"$\"#,##0.00)"                                           - currency                  #,##0.00
+8    "\"$\"#,##0.00_);[Red](\"$\"#,##0.00)"                                      - currency red if < 0       #,##0.00
+9    "0%"
+0    "0.00%"
+1    "0.00E+00"
+2    "# ?/?"
+3    "# ??/??"
+4    "m/d/yy"
+5    "d-mmm-yy"
+6    "d-mmm"
+7    "mmm-yy"
+8    "h:mm AM/PM"
+9    "h:mm:ss AM/PM"
+0    "h:mm"
+1    "h:mm:ss"
+2    "m/d/yy h:mm"
+3    "#,##0_);(#,##0)"                                                          - number                     #,##0
+4    "#,##0_);[Red](#,##0)"                                                     - number red if < 0          #,##0
+5    "#,##0.00_);(#,##0.00)"                                                    - number                     #,##0.00
+6    "#,##0.00_);[Red](#,##0.00)"                                               - number red if < 0          #,##0.00
+7    "_(\"$\"* #,##0_);_(\"$\"* (#,##0);_(\"$\"* \"-\"_);_(@_)"                 - accounting no symbol       #,##0
+8    "_(* #,##0_);_(* (#,##0);_(* \"-\"_);_(@_)"                                - accounting have symbol $   #,##0
+9    "_(* #,##0.00_);_(* (#,##0.00);_(* \"-\"??_);_(@_)"                        - accounting no symbol       #,##0.00
+0    "_(\"$\"* #,##0.00_);_(\"$\"* (#,##0.00);_(\"$\"* \"-\"??_);_(@_)"         - accounting have symbol $   #,##0.00
+1    "mm:ss"
+2    "[h]:mm:ss"
+3    "mm:ss.0"
+4    "##0.0E+0"
+5    "@"
+*/
+
+#endregion _stringFormat
+
+using NPOI.HSSF.UserModel;
+using NPOI.HSSF.Util;
+using NPOI.SS.UserModel;
+using NPOI.SS.Util;
+using NPOI.XSSF.UserModel;
+using ReportTools.Models;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Linq;
+using System.Text.RegularExpressions;
+
+namespace ReportTools.Classes
+{
+    public class ExcelHelper
+    {
+        public XSSFWorkbook workBook;
+        private string workBookPath;  //path of workBook
+        private string tempPath; //path of save file
+        private string fileName;
+
+        private string userID;
+        private int sequence = 0; //for row NO of insertData Group
+        private int groupNo = 0; //for row NO of insertData Group
+        private int colGroupNo = -1;
+
+        public List<string> excludedColumn;
+        public List<string> excludedColumnSum;
+        public List<string> dateColumns; //Columns with date format
+        public List<ICell> ignoreCells; //ignore cells with only text and have multi format
+
+        public bool resetSequence = true;
+       
+        private List<CellRangeAddress> listMergeRegion;
+
+        public static List<string> mapColumnExcel = new List<string> {
+                                "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+                                "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ",
+                                "BA", "BB", "BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BK", "BL", "BM", "BN", "BO", "BP", "BQ", "BR", "BS", "BT", "BU", "BV", "BW", "BX", "BY", "BZ",
+                                "CA", "CB", "CC", "CD", "CE", "CF", "CG", "CH", "CI", "CJ", "CK", "CL", "CM", "CN", "CO", "CP", "CQ", "CR", "CS", "CT", "CU", "CV", "CW", "CX", "CY", "CZ",
+                                "DA", "DB", "DC", "DD", "DE", "DF", "DG", "DH", "DI", "DJ", "DK", "DL", "DM", "DN", "DO", "DP", "DQ", "DR", "DS", "DT", "DU", "DV", "DW", "DX", "DY", "DZ",
+                                "EA", "EB", "EC", "ED", "EE", "EF", "EG", "EH", "EI", "EJ", "EK", "EL", "EM", "EN", "EO", "EP", "EQ", "ER", "ES", "ET", "EU", "EV", "EW", "EX", "EY", "EZ",
+                                "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH", "FI", "FJ", "FK", "FL", "FM", "FN", "FO", "FP", "FQ", "FR", "FS", "FT", "FU", "FV", "FW", "FX", "FY", "FZ",
+                                "GA", "GB", "GC", "GD", "GE", "GF", "GG", "GH", "GI", "GJ", "GK", "GL", "GM", "GN", "GO", "GP", "GQ", "GR", "GS", "GT", "GU", "GV", "GW", "GX", "GY", "GZ",
+                                "HA", "HB", "HC", "HD", "HE", "HF", "HG", "HH", "HI", "HJ", "HK", "HL", "HM", "HN", "HO", "HP", "HQ", "HR", "HS", "HT", "HU", "HV", "HW", "HX", "HY", "HZ",
+                                "IA", "IB", "IC", "ID", "IE", "IF", "IG", "IH", "II", "IJ", "IK", "IL", "IM", "IN", "IO", "IP", "IQ", "IR", "IS", "IT", "IU", "IV", "IW", "IX", "IY", "IZ",
+                                "JA", "JB", "JC", "JD", "JE", "JF", "JG", "JH", "JI", "JJ", "JK", "JL", "JM", "JN", "JO", "JP", "JQ", "JR", "JS", "JT", "JU", "JV", "JW", "JX", "JY", "JZ",
+                                "KA", "KB", "KC", "KD", "KE", "KF", "KG", "KH", "KI", "KJ", "KK", "KL", "KM", "KN", "KO", "KP", "KQ", "KR", "KS", "KT", "KU", "KV", "KW", "KX", "KY", "KZ",
+                                "LA", "LB", "LC", "LD", "LE", "LF", "LG", "LH", "LI", "LJ", "LK", "LL", "LM", "LN", "LO", "LP", "LQ", "LR", "LS", "LT", "LU", "LV", "LW", "LX", "LY", "LZ",
+                                "MA", "MB", "MC", "MD", "ME", "MF", "MG", "MH", "MI", "MJ", "MK", "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ",
+                                "NA", "NB", "NC", "ND", "NE", "NF", "NG", "NH", "NI", "NJ", "NK", "NL", "NM", "NN", "NO", "NP", "NQ", "NR", "NS", "NT", "NU", "NV", "NW", "NX", "NY", "NZ",
+                                "OA", "OB", "OC", "OD", "OE", "OF", "OG", "OH", "OI", "OJ", "OK", "OL", "OM", "ON", "OO", "OP", "OQ", "OR", "OS", "OT", "OU", "OV", "OW", "OX", "OY", "OZ",
+                                "PA", "PB", "PC", "PD", "PE", "PF", "PG", "PH", "PI", "PJ", "PK", "PL", "PM", "PN", "PO", "PP", "PQ", "PR", "PS", "PT", "PU", "PV", "PW", "PX", "PY", "PZ",
+                                "QA", "QB", "QC", "QD", "QE", "QF", "QG", "QH", "QI", "QJ", "QK", "QL", "QM", "QN", "QO", "QP", "QQ", "QR", "QS", "QT", "QU", "QV", "QW", "QX", "QY", "QZ",
+                                "RA", "RB", "RC", "RD", "RE", "RF", "RG", "RH", "RI", "RJ", "RK", "RL", "RM", "RN", "RO", "RP", "RQ", "RR", "RS", "RT", "RU", "RV", "RW", "RX", "RY", "RZ",
+                                "SA", "SB", "SC", "SD", "SE", "SF", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SP", "SQ", "SR", "SS", "ST", "SU", "SV", "SW", "SX", "SY", "SZ",
+                                "TA", "TB", "TC", "TD", "TE", "TF", "TG", "TH", "TI", "TJ", "TK", "TL", "TM", "TN", "TO", "TP", "TQ", "TR", "TS", "TT", "TU", "TV", "TW", "TX", "TY", "TZ",
+                                "UA", "UB", "UC", "UD", "UE", "UF", "UG", "UH", "UI", "UJ", "UK", "UL", "UM", "UN", "UO", "UP", "UQ", "UR", "US", "UT", "UU", "UV", "UW", "UX", "UY", "UZ",
+                                "VA", "VB", "VC", "VD", "VE", "VF", "VG", "VH", "VI", "VJ", "VK", "VL", "VM", "VN", "VO", "VP", "VQ", "VR", "VS", "VT", "VU", "VV", "VW", "VX", "VY", "VZ",
+                                "WA", "WB", "WC", "WD", "WE", "WF", "WG", "WH", "WI", "WJ", "WK", "WL", "WM", "WN", "WO", "WP", "WQ", "WR", "WS", "WT", "WU", "WV", "WW", "WX", "WY", "WZ",
+                                "XA", "XB", "XC", "XD", "XE", "XF", "XG", "XH", "XI", "XJ", "XK", "XL", "XM", "XN", "XO", "XP", "XQ", "XR", "XS", "XT", "XU", "XV", "XW", "XX", "XY", "XZ",
+                                "YA", "YB", "YC", "YD", "YE", "YF", "YG", "YH", "YI", "YJ", "YK", "YL", "YM", "YN", "YO", "YP", "YQ", "YR", "YS", "YT", "YU", "YV", "YW", "YX", "YY", "YZ",
+                                "ZA", "ZB", "ZC", "ZD", "ZE", "ZF", "ZG", "ZH", "ZI", "ZJ", "ZK", "ZL", "ZM", "ZN", "ZO", "ZP", "ZQ", "ZR", "ZS", "ZT", "ZU", "ZV", "ZW", "ZX", "ZY", "ZZ",
+            };
+
+        public ExcelHelper(string workBookPath, string tempPath, string userID)
+        {
+            this.workBookPath = workBookPath;
+            this.tempPath = tempPath;
+            this.fileName = Path.GetFileName(workBookPath);
+            this.userID = userID;
+            this.excludedColumn = new List<string>();
+            this.excludedColumnSum = new List<string>();
+            this.dateColumns = new List<string>();
+            this.ignoreCells = new List<ICell>();
+            this.listMergeRegion = new List<CellRangeAddress>();
+            this.workBook = LoadFile();
+        }
+
+        public void CreateRows(ISheet _sheet, int _loop, int tempRow)
+        {
+            if (_loop <= 1) return;
+            var iRowMove = _sheet.LastRowNum - tempRow;
+
+            for (int i = iRowMove - 1; i >= 0; i--)
+            {
+                MoveRow(_sheet, tempRow + i + 1, tempRow + i + _loop);
+            }
+
+            for (int i = 0; i < _loop - 1; i++) //ignore first row
+            {
+                CloneRow(workBook, _sheet, tempRow + i, tempRow + i + 1);
+            }
+        }
+
+        public void CreateRows(ISheet _sheet, int _loop, int tempRow, bool isMoveRow)
+        {
+            if (_loop <= 1) return;
+            var iRowMove = _sheet.LastRowNum - tempRow;
+            if (isMoveRow) 
+            {
+                for (int i = iRowMove - 1; i >= 0; i--)
+                {
+                    MoveRow(_sheet, tempRow + i + 1, tempRow + i + _loop);
+                }
+            }
+
+            for (int i = 0; i < _loop - 1; i++) //ignore first row
+            {
+                CloneRow(workBook, _sheet, tempRow + i, tempRow + i + 1);
+            }
+        }
+
+        public void CopyRangeTo(ISheet _sheet, string _range, int _rowCopyTo)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            var rowInsert = endCell.RowIndex - startCell.RowIndex + 1;
+
+            for (int i = 0; i < rowInsert; i++)
+            {
+                CloneRow(this.workBook, _sheet, startCell.RowIndex + i, _rowCopyTo + i);
+            }
+        }
+
+        public void CopyRangeTo(ISheet _sheet, ICell _startCell, ICell _endCell, int _rowCopyTo)
+        {
+            var rowInsert = _endCell.RowIndex - _startCell.RowIndex + 1;
+
+            for (int i = 0; i < rowInsert; i++)
+            {
+                CloneRow(this.workBook, _sheet, _startCell.RowIndex + i, _rowCopyTo + i);
+            }
+        }
+
+        public void CopyRangeTo2(ISheet _sheet, ICell _startCell, ICell _endCell, int _rowCopyTo, DataTable _dataTable, int _rowIndex, bool _isLastRow, int _mergeIndex)
+        {
+            var rowInsert = _endCell.RowIndex - _startCell.RowIndex + 1;
+
+            for (int i = 0; i < rowInsert; i++)
+            {
+                CloneRow2(this.workBook, _sheet, _startCell.RowIndex + i, _rowCopyTo + i, _dataTable, _rowIndex, _isLastRow, _mergeIndex);
+            }
+        }
+
+        public void CopyRangeTo3(ISheet _sheet, ICell _startCell, ICell _endCell, int _rowCopyTo, int _rowIndex, bool _isLastRow)
+        {
+            var rowInsert = _endCell.RowIndex - _startCell.RowIndex + 1;
+
+            for (int i = 0; i < rowInsert; i++)
+            {
+                CloneRow3(this.workBook, _sheet, _startCell.RowIndex + i, _rowCopyTo + i, _rowIndex, _isLastRow);
+            }
+        }
+
+        public void CreateRanges(ISheet _sheet, int _loop, string _range)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            var numRowofRange = endCell.RowIndex - startCell.RowIndex + 1;
+            var rowInsert = numRowofRange * _loop;
+            var iRowMove = _sheet.LastRowNum - endCell.RowIndex;
+
+            for (int i = iRowMove - 1; i >= 0; i--)
+            {
+                MoveRow(_sheet, endCell.RowIndex + i + 1, startCell.RowIndex + i + rowInsert);
+            }
+
+            var indexCopyTo = endCell.RowIndex + 1;
+            for (int i = 0; i < _loop - 1; i++) //ignore first range
+            {
+                this.CopyRangeTo(_sheet, startCell, endCell, indexCopyTo);
+                indexCopyTo += numRowofRange;
+            }
+        }
+
+        public void CreateRanges2(ISheet _sheet, DataTable _dataTable, int _loop, string _range)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            var numRowofRange = endCell.RowIndex - startCell.RowIndex + 1;
+            var rowInsert = numRowofRange * _loop;
+            var iRowMove = _sheet.LastRowNum - endCell.RowIndex;
+
+            for (int i = iRowMove - 1; i >= 0; i--)
+            {
+                MoveRow(_sheet, endCell.RowIndex + i + 1, startCell.RowIndex + i + rowInsert);
+            }
+
+            var indexCopyTo = endCell.RowIndex + 1;
+            var mergeIndex = 0;
+            var mergeFirstCount = _sheet.NumMergedRegions;
+            //for check mergeregion
+            for (int i = 0; i < _sheet.NumMergedRegions; i++)
+            {
+                CellRangeAddress cellRangeAddress = _sheet.GetMergedRegion(i);
+                listMergeRegion.Add(cellRangeAddress);
+            }
+
+            for (int i = 0; i < _loop; i++) //ignore first range
+            {
+                if (i > 0)
+                {
+                    startCell = GetCellByAddress(_sheet, cells[0], numRowofRange * i);
+                    endCell = GetCellByAddress(_sheet, cells[1], numRowofRange * i);
+                }
+
+                if (i < _loop - 1)
+                    this.CopyRangeTo2(_sheet, startCell, endCell, indexCopyTo, _dataTable, i, false, mergeIndex);
+                else
+                    this.InsertRowData(_sheet, _dataTable, i, startCell, endCell);
+
+                mergeIndex = listMergeRegion.Count - mergeFirstCount;
+                indexCopyTo += numRowofRange;
+            }
+        }
+
+        public void CreateRanges3(ISheet _sheet, int _loop, string _range)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            var numRowofRange = endCell.RowIndex - startCell.RowIndex + 1;
+            var rowInsert = numRowofRange * _loop;
+            var iRowMove = _sheet.LastRowNum - endCell.RowIndex;
+
+            if (_loop > 1)
+            {
+                for (int i = iRowMove - 1; i >= 0; i--)
+                {
+                    MoveRow(_sheet, endCell.RowIndex + i + 1, startCell.RowIndex + i + rowInsert);
+                }
+            }
+
+            var indexCopyTo = endCell.RowIndex + 1;
+
+            for (int i = 0; i < _loop; i++) //ignore first range
+            {
+                if (i > 0)
+                {
+                    startCell = GetCellByAddress(_sheet, cells[0], numRowofRange * i);
+                    endCell = GetCellByAddress(_sheet, cells[1], numRowofRange * i);
+                }
+
+                if (i < _loop - 1)
+                    this.CopyRangeTo3(_sheet, startCell, endCell, indexCopyTo, i, false);
+                
+                indexCopyTo += numRowofRange;
+            }
+        }
+
+        public void InsertRowData(ISheet _sheet, DataRow _rowData, int _rowIndex)
+        {
+            List<string> infoColNames = new List<string>(); //column name of data Result
+
+            var rowInfo = _sheet.GetRow(_rowIndex);
+            if (rowInfo == null) return;
+
+            for (int i = 0; i < rowInfo.LastCellNum; i++)
+            {
+                var cell = rowInfo.GetCell(i);
+                if (cell == null) cell = rowInfo.CreateCell(i);
+                infoColNames.Add(GetCellValue(cell));
+            }
+
+            for (int j = 0; j < infoColNames.Count; j++)
+            {
+                if (string.IsNullOrEmpty(infoColNames[j])) continue;
+                var cell = GetCellByIndex(_sheet, _rowIndex, j);
+
+                double temp = 0;
+                var cellValue = "";
+                try
+                {
+                    cellValue = _rowData[infoColNames[j].ToLower()].ToString();
+                }
+                catch {
+                    continue;
+                }
+
+                if (double.TryParse(cellValue, out temp) && !excludedColumn.Contains(infoColNames[j].ToLower()))
+                {
+                    SetCellValue(cell, null, temp);
+                }
+                else
+                {
+                    SetCellValue(cell, null, cellValue + "");
+                }
+            }
+        }
+
+        public void InsertRowData(ISheet _sheet, DataRow _rowData, int _rowIndex, int _no)
+        {
+            List<string> infoColNames = new List<string>(); //column name of data Result
+
+            var rowInfo = _sheet.GetRow(_rowIndex);
+            if (rowInfo == null) return;
+
+            for (int i = 0; i < rowInfo.LastCellNum; i++)
+            {
+                var cell = rowInfo.GetCell(i);
+                if (cell == null) cell = rowInfo.CreateCell(i);
+                infoColNames.Add(GetCellValue(cell));
+            }
+
+            for (int j = 0; j < infoColNames.Count; j++)
+            {
+                if (string.IsNullOrEmpty(infoColNames[j])) continue;
+                var cell = GetCellByIndex(_sheet, _rowIndex, j);
+
+                if (infoColNames[j].ToLower() == "no" || infoColNames[j].ToLower() == "stt")
+                {
+                    SetCellValue(cell, null, _no);
+                    continue;
+                }
+                else if (infoColNames[j].ToLower() == "groupno" )
+                {
+                    colGroupNo = j;
+                    SetCellValue(cell, null, groupNo);
+                    continue;
+                }
+                else if (dateColumns.Contains(infoColNames[j].ToLower()))
+                {
+                    var strVal = _rowData[infoColNames[j].ToLower()].ToString();
+
+                    DateTime d = new DateTime();
+                    try
+                    {
+                        d = DateTime.ParseExact(strVal, "dd/MM/yyyy", null);
+                        SetCellValue(cell, null, d);
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            d = DateTime.ParseExact(strVal, "yyyyMMdd", null);
+                            SetCellValue(cell, null, d);
+                        }
+                        catch
+                        {
+
+                            SetCellValue(cell, null, strVal + "");
+                        }
+                    }
+                }
+                else if (_rowData[infoColNames[j].ToLower()].GetType() == typeof(byte[])) //infoColNames[j].ToLower().Contains("imagebyte")
+                {
+                    try
+                    {
+                        byte[] data;
+                        data = (byte[])_rowData[infoColNames[j].ToLower()];
+                        //insert image
+                        InsertImageOneCell(_sheet, cell, (byte[])_rowData[infoColNames[j].ToLower()]);
+                    }
+                    catch
+                    {
+
+                    }
+
+                }
+                else
+                {
+                    double temp = 0;
+                    var cellValue = _rowData[infoColNames[j].ToLower()].ToString();
+                    if (double.TryParse(cellValue, out temp) && !excludedColumn.Contains(infoColNames[j].ToLower()))
+                    {
+                        SetCellValue(cell, null, temp);
+                    }
+                    else
+                    {
+                        SetCellValue(cell, null, cellValue + "");
+                    }
+                }
+            }
+        }
+
+        ///<summary>
+        ///Use this for insert RowData from datatable to a range start cell and end cell (Ex: [A1:Z15])
+        ///</summary>
+        public void InsertRowData(ISheet _sheet, DataTable _dataTable, int _rowIndex, ICell _startCell, ICell _endCell)
+        {
+            int rowNumOfRange = _endCell.RowIndex - _startCell.RowIndex;
+
+            for (var j = 0; j < rowNumOfRange; j++)
+            {
+                var rowIdx = _startCell.RowIndex + j ;
+                var row = _sheet.GetRow(rowIdx);
+                if (row == null) row = _sheet.CreateRow(rowIdx);
+
+                for (var jj = 0; jj < row.LastCellNum; jj++)
+                {
+                    var cell = GetCellByIndex(_sheet, rowIdx, jj);
+                    if (ignoreCells.Contains(cell))
+                        continue;
+                    string cellText = cell.CellType == CellType.String ? cell.StringCellValue : "";
+
+                    FillData(_sheet, cell, _dataTable.Rows[_rowIndex], cellText);
+                }
+            }
+        }
+
+        ///<summary>
+        ///Insert datas row by row
+        ///</summary>
+        ///
+        public void InsertData(ISheet _sheet, DataTable _dataTable, int _startRow)
+        {
+            InsertData(_sheet, _dataTable, _startRow, false);
+        }
+
+        public void InsertData(ISheet _sheet, DataTable _dataTable, int _startRow, bool _autofitHeight)
+        {
+            List<string> infoColNames = new List<string>(); //column name of data Result
+            
+            var rowInfo = _sheet.GetRow(_startRow);
+            if (rowInfo == null) return;
+
+            for (int i = 0; i < rowInfo.LastCellNum; i++)
+            {
+                var cell = rowInfo.GetCell(i);
+                if (cell == null) cell = rowInfo.CreateCell(i);
+                infoColNames.Add(GetCellValue(cell));
+            }
+
+            var rowInsert = _dataTable.Rows.Count;
+            this.CreateRows(_sheet, rowInsert, _startRow);
+
+            var iNo = 0;
+            for (int i = 0; i < _dataTable.Rows.Count; i++)
+            {
+                iNo++;
+                for (int j = 0; j < infoColNames.Count; j++)
+                {
+                    if (string.IsNullOrEmpty(infoColNames[j])) continue;
+                    var cell = GetCellByIndex(_sheet, i + _startRow, j);
+
+                    var cellValue = "";
+                    try
+                    {
+                        if(infoColNames[j].ToLower() != "no")
+                            cellValue = _dataTable.Rows[i][infoColNames[j].ToLower()].ToString();
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    if (ignoreCells.Contains(cell))
+                        continue;
+                    if (infoColNames[j].ToLower() == "no" || infoColNames[j].ToLower() == "stt")
+                    {
+                        SetCellValue(cell, null, iNo);
+                    }
+                    else if (dateColumns.Contains(infoColNames[j].ToLower()))
+                    {
+                        var strVal = _dataTable.Rows[i][infoColNames[j].ToLower()].ToString();
+
+                        DateTime d = new DateTime();
+                        try
+                        {
+                            d = DateTime.ParseExact(strVal, "dd/MM/yyyy", null);
+                            SetCellValue(cell, null, d);
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                d = DateTime.ParseExact(strVal, "yyyyMMdd", null);
+                                SetCellValue(cell, null, d);
+                            }
+                            catch
+                            {
+
+                                SetCellValue(cell, null, strVal + "");
+                            }
+                        }
+                    }
+                    else if (_dataTable.Columns[infoColNames[j].ToLower()].DataType == typeof(byte[])) //infoColNames[j].ToLower().Contains("imagebyte")
+                    {
+                        try
+                        {
+                            byte[] data;
+                            data = (byte[])_dataTable.Rows[i][infoColNames[j].ToLower()];
+                            //insert image
+                            InsertImageOneCell(_sheet, cell, (byte[])_dataTable.Rows[i][infoColNames[j].ToLower()]);
+                        }
+                        catch
+                        {
+
+                        }
+                        
+                    }
+                    else
+                    {
+                        double temp = 0;
+                        //var cellValue = _dataTable.Rows[i][infoColNames[j].ToLower()].ToString();
+                        if (double.TryParse(cellValue, out temp) && !excludedColumn.Contains(infoColNames[j].ToLower()))
+                        {
+                            SetCellValue(cell, null, temp);
+                        }
+                        else
+                        {
+                            SetCellValue(cell, null, cellValue + "");
+                        }
+                    }
+                }
+                if (_autofitHeight)
+                {
+                    var row = _sheet.GetRow(i + _startRow);
+                    row.Height = -1;
+                }
+                
+            }
+        }
+
+        ///<summary>
+        ///Insert data into range (each row in datatable insert to 1 range)
+        ///</summary>
+        public void InsertData(ISheet _sheet, DataTable _dataTable, string _range)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            var rangeInsert = _dataTable.Rows.Count;
+            var rowNumOfRange = endCell.RowIndex - startCell.RowIndex + 1;
+            var rowIndex = startCell.RowIndex;
+
+            this.CreateRanges(_sheet, rangeInsert, _range);
+
+            //loop row in datatable
+            for (int i = 0; i < rangeInsert; i++)
+            {
+                // loop row in form
+                for (var j = 0; j < rowNumOfRange; j++)
+                {
+                    var row = _sheet.GetRow(rowIndex);
+                    if (row == null) row = _sheet.CreateRow(rowIndex);
+
+                    for (var jj = 0; jj < row.LastCellNum; jj++)
+                    {
+                        var cell = GetCellByIndex(_sheet, rowIndex, jj);
+                        if (ignoreCells.Contains(cell))
+                            continue;
+                        string cellText = cell.CellType == CellType.String ? cell.StringCellValue : "";
+
+                        FillData(_sheet, cell, _dataTable.Rows[i], cellText);
+                    }
+                    rowIndex++;
+                }
+            }
+        }
+
+        ///<summary>
+        ///Insert data into range
+        ///</summary>
+        public void InsertData(ISheet _sheet, DataRow _dataRow, string _range)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            var rangeInsert = 1;
+            var rowNumOfRange = endCell.RowIndex - startCell.RowIndex + 1;
+            var rowIndex = startCell.RowIndex;
+
+            //this.CreateRanges(_sheet, rangeInsert, _range);
+            // loop row in form
+            for (var j = 0; j < rowNumOfRange; j++)
+            {
+                var row = _sheet.GetRow(rowIndex);
+                if (row == null) row = _sheet.CreateRow(rowIndex);
+
+                for (var jj = 0; jj < row.LastCellNum; jj++)
+                {
+                    var cell = GetCellByIndex(_sheet, rowIndex, jj);
+                    if (ignoreCells.Contains(cell))
+                        continue;
+                    string cellText = cell.CellType == CellType.String ? cell.StringCellValue : "";
+
+                    FillData(_sheet, cell, _dataRow, cellText);
+                }
+                rowIndex++;
+            }
+        }
+
+        ///<summary>
+        ///Insert data into range (PERFORM SPEED)
+        ///</summary>
+        public void InsertData2(ISheet _sheet, DataTable _dataTable, string _range)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            var rangeInsert = _dataTable.Rows.Count;
+            var rowNumOfRange = endCell.RowIndex - startCell.RowIndex + 1;
+            var rowIndex = startCell.RowIndex;
+
+            this.CreateRanges2(_sheet, _dataTable, rangeInsert, _range);
+        }
+
+        public void InsertData(ISheet _sheet, int _loop, DataTable _dataTable, string _range)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            var rangeInsert = _loop;
+            var rowNumOfRange = endCell.RowIndex - startCell.RowIndex + 1;
+            var rowIndex = startCell.RowIndex;
+
+            //loop row in datatable
+            for (int i = 0; i < rangeInsert; i++)
+            {
+                // loop row in form
+                for (var j = 0; j < rowNumOfRange; j++)
+                {
+                    var row = _sheet.GetRow(rowIndex);
+                    if (row == null) row = _sheet.CreateRow(rowIndex);
+
+                    for (var jj = 0; jj < row.LastCellNum; jj++)
+                    {
+                        var cell = GetCellByIndex(_sheet, rowIndex, jj);
+                        if (ignoreCells.Contains(cell))
+                            continue;
+                        string cellText = cell.CellType == CellType.String ? cell.StringCellValue : "";
+
+                        for (var q = 0; q < _dataTable.Rows.Count; q++)
+                        {
+                            FillData(_sheet, cell, _dataTable.Rows[q], cellText);
+                        }
+                    }
+                    rowIndex++;
+                }
+            }
+        }
+
+        public void InsertData(ISheet _sheet, DataTable _dataTable, int _startRow, EXOptions options)
+        {
+            if (options == null || options.sheets.Count <= 0)
+            {
+                InsertData(_sheet, _dataTable, _startRow);
+            }
+            else
+            {
+                int idxSheet = workBook.GetSheetIndex(_sheet);
+                EXSheet sheetOptions = options.sheets.Where(d => d.SheetIndex == idxSheet).FirstOrDefault();
+
+                if (sheetOptions == null || (sheetOptions.merges.Count <= 0 && sheetOptions.GrandTotal == null))
+                {
+                    InsertData(_sheet, _dataTable, _startRow);
+                }
+                else
+                {
+                    int idxRow = _startRow;
+                    var data = _dataTable.AsEnumerable();
+
+                    //insert data with sub total
+                    InsertGroupData(_sheet, data, sheetOptions.merges, 0, ref idxRow);
+
+                    //Insert grand total
+                    if (sheetOptions.GrandTotal != null)
+                    {
+                        if (sheetOptions.GrandTotal.isTotal == true)
+                        {
+                            InsertTotal(_sheet, "", data, 0, 0, sheetOptions.GrandTotal, "grand", ref idxRow);
+                            CloneRow(workBook, _sheet, idxRow + 1, idxRow);
+                        }
+                        else
+                        {
+                            CloneRow(workBook, _sheet, idxRow + 1, idxRow);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void InsertGroupData(ISheet _sheet, IEnumerable<DataRow> _sourceData, List<EXMerge> _merges, int _mergeIndex, ref int _idxRow)
+        {
+            if (_mergeIndex >= _merges.Count)
+            {
+               
+                foreach (var item in _sourceData)
+                {
+                    ++sequence;
+                    int no = resetSequence ? 1 : sequence;
+
+                    CloneRow(workBook, _sheet, _idxRow, _idxRow + 1);
+                    InsertRowData(_sheet, item, _idxRow, no++);
+
+                    _idxRow++;
+                }
+            }
+            else
+            {
+                var groups = _sourceData.GroupBy(g => g[_merges[_mergeIndex].ColumnName]);
+                foreach (var group in groups)
+                {
+                    var groupValue = group.Key + "";
+                    var groupData = group.Select(s => s);
+
+                    if (_merges[_mergeIndex].isTotal == true && _merges[_mergeIndex].isTotalTop == true)
+                    {
+                        InsertTotal(_sheet, groupValue, groupData, 0, 0, _merges[_mergeIndex], "sub", ref _idxRow);
+                    }
+
+                    int startMerge = _idxRow;
+
+                    ++groupNo;
+                    InsertGroupData(_sheet, groupData, _merges, _mergeIndex + 1, ref _idxRow);
+
+                    int endMerge = _idxRow - 1;
+
+                    if (colGroupNo >= 0) {
+                        _sheet.AddMergedRegion(new CellRangeAddress(startMerge, endMerge, colGroupNo, colGroupNo));
+                    }
+
+                    if (_merges[_mergeIndex].isTotal == true && _merges[_mergeIndex].isTotalTop == false)
+                    {
+                        InsertTotal(_sheet, groupValue, groupData, startMerge, endMerge, _merges[_mergeIndex], "sub", ref _idxRow);
+                    }
+                    else if (_merges[_mergeIndex].isTotal == true && _merges[_mergeIndex].isTotalTop == true)
+                    {
+                        _sheet.AddMergedRegion(new CellRangeAddress(startMerge, endMerge, _merges[_mergeIndex].ColumnIndex, _merges[_mergeIndex].ColumnIndex));
+                    }
+                }
+            }
+        }
+
+        private void InsertTotal(ISheet _sheet, string _groupValue, IEnumerable<DataRow> _groupData, int _startMerge, int _endMerge, EXMerge _mergeOption, string _totalType, ref int _idxRow)
+        {
+            if (_mergeOption.isHaveRowTotal == true)
+            {
+                //sub total
+                CloneRow(workBook, _sheet, _idxRow, _idxRow + 1);
+
+                var ColumnMergeOptions = _mergeOption.ColumnMergeOptions;
+                var row = _sheet.GetRow(_idxRow);
+
+                string strTotal = "";
+                if (string.IsNullOrEmpty(_mergeOption.TotalText))
+                {
+                    strTotal = _totalType == "sub" ? "Total " : (_totalType == "grand" ? "Grand Total " : "");
+                } 
+                else
+                {
+                    strTotal = _mergeOption.TotalText;
+                }
+
+
+
+
+                if (row != null)
+                {
+                    switch (_mergeOption.SubTotalType)
+                    {
+                        case SubTotalType.Count:
+                            {
+                                for (int i = _mergeOption.MergeColumnFrom; i < row.LastCellNum; i++)
+                                {
+                                    var cell = GetCellByIndex(_sheet, _idxRow, i);
+                                    string value = "";
+
+                                    if (i == _mergeOption.ColumnIndex)
+                                    {
+                                        switch (_mergeOption.TotalTextType)
+                                        {
+                                            case TotalTextType.NoValue:
+                                                {
+                                                    value = ""; break;
+                                                }
+                                            case TotalTextType.GroupValue:
+                                                {
+                                                    value = _groupValue; break;
+                                                }
+                                            case TotalTextType.GroupValueAndCount:
+                                                {
+                                                    value = _groupValue + ": " + _groupData.Count();break;
+                                                }
+                                            case TotalTextType.Input:
+                                                {
+                                                    value = string.Format(_mergeOption.TotalText, _groupValue, _groupData.Count());break;
+                                                }
+                                            default:
+                                                {
+                                                    value = strTotal + _groupValue + ": " + _groupData.Count(); break;
+                                                }
+                                        }
+                                        
+                                    }
+
+                                    cell.SetCellValue(value);
+                                    SetFont(cell, _mergeOption.SubTotalFont);
+                                    SetCellBackgroundColor(cell, _mergeOption.CellColor);
+                                }
+                                break;
+                            }
+                        case SubTotalType.SumValue:
+                            {
+                                for (int i = _mergeOption.MergeColumnFrom; i < row.LastCellNum; i++)
+                                {
+                                    var cell = GetCellByIndex(_sheet, _idxRow, i);
+                                    string value = "";
+
+                                    if (i == _mergeOption.ColumnIndex)
+                                    {
+                                        switch (_mergeOption.TotalTextType)
+                                        {
+                                            case TotalTextType.NoValue:
+                                                {
+                                                    value = ""; break;
+                                                }
+                                            case TotalTextType.GroupValue:
+                                                {
+                                                    value = _groupValue; break;
+                                                }
+                                            case TotalTextType.GroupValueAndCount:
+                                                {
+                                                    value = _groupValue + ": " + _groupData.Count(); break;
+                                                }
+                                            case TotalTextType.Input:
+                                                {
+                                                    value = string.Format(_mergeOption.TotalText, _groupValue, _groupData.Count()); break;
+                                                }
+                                            default:
+                                                {
+                                                    value = strTotal + _groupValue + ": " + _groupData.Count(); break;
+                                                }
+                                        }
+                                        cell.SetCellValue(value);
+                                    }
+                                    else
+                                    {
+                                        try
+                                        {
+                                            double sumValue = 0;
+                                            double tmp = 0;
+                                            string columnName = cell.StringCellValue;
+                                            if (!excludedColumnSum.Contains(columnName.ToLower()))
+                                            {
+                                                sumValue = _groupData.Sum(s => double.TryParse(s[columnName].ToString(), out tmp) ? tmp : 0);
+                                                cell.SetCellValue(sumValue);
+                                            }
+                                            else
+                                            {
+                                                value = "";
+                                                //switch (_mergeOption.TotalTextType)
+                                                //{
+                                                //    case TotalTextType.NoValue:
+                                                //        {
+                                                //            value = ""; break;
+                                                //        }
+                                                //    case TotalTextType.GroupValue:
+                                                //        {
+                                                //            value = _groupValue; break;
+                                                //        }
+                                                //    case TotalTextType.GroupValueAndCount:
+                                                //        {
+                                                //            value = _groupValue + ": " + _groupData.Count(); break;
+                                                //        }
+                                                //    case TotalTextType.Input:
+                                                //        {
+                                                //            value = string.Format(_mergeOption.TotalText, _groupValue, _groupData.Count()); break;
+                                                //        }
+                                                //    default:
+                                                //        {
+                                                //            value = strTotal + _groupValue + ": " + _groupData.Count(); break;
+                                                //        }
+                                                //}
+                                                cell.SetCellValue(value);
+                                            }
+                                        }
+                                        catch
+                                        {
+                                            value = "";
+                                            //switch (_mergeOption.TotalTextType)
+                                            //{
+                                            //    case TotalTextType.NoValue:
+                                            //        {
+                                            //            value = ""; break;
+                                            //        }
+                                            //    case TotalTextType.GroupValue:
+                                            //        {
+                                            //            value = _groupValue; break;
+                                            //        }
+                                            //    case TotalTextType.GroupValueAndCount:
+                                            //        {
+                                            //            value = _groupValue + ": " + _groupData.Count(); break;
+                                            //        }
+                                            //    case TotalTextType.Input:
+                                            //        {
+                                            //            value = string.Format(_mergeOption.TotalText, _groupValue, _groupData.Count()); break;
+                                            //        }
+                                            //    default:
+                                            //        {
+                                            //            value = strTotal + _groupValue + ": " + _groupData.Count(); break;
+                                            //        }
+                                            //}
+                                            cell.SetCellValue(value);
+                                        }
+                                    }
+                                    SetFont(cell, _mergeOption.SubTotalFont);
+                                    SetCellBackgroundColor(cell, _mergeOption.CellColor);
+                                }
+                                break;
+                            }
+                        case SubTotalType.Average:
+                            {
+                                for (int i = _mergeOption.MergeColumnFrom; i < row.LastCellNum; i++)
+                                {
+                                    var cell = GetCellByIndex(_sheet, _idxRow, i);
+                                    string value = "";
+
+                                    if (i == _mergeOption.ColumnIndex)
+                                    {
+                                        switch (_mergeOption.TotalTextType)
+                                        {
+                                            case TotalTextType.NoValue:
+                                                {
+                                                    value = ""; break;
+                                                }
+                                            case TotalTextType.GroupValue:
+                                                {
+                                                    value = _groupValue; break;
+                                                }
+                                            case TotalTextType.GroupValueAndCount:
+                                                {
+                                                    value = _groupValue + ": " + _groupData.Count(); break;
+                                                }
+                                            case TotalTextType.Input:
+                                                {
+                                                    value = string.Format(_mergeOption.TotalText, _groupValue, _groupData.Count()); break;
+                                                }
+                                            default:
+                                                {
+                                                    value = strTotal + _groupValue + ": " + _groupData.Count(); break;
+                                                }
+                                        }
+                                        cell.SetCellValue(value);
+                                    }
+                                    else
+                                    {
+                                        try
+                                        {
+                                            double sumValue = 0;
+                                            double countData = 0;
+                                            double tmp = 0;
+                                            string columnName = cell.StringCellValue;
+
+                                            if (!excludedColumnSum.Contains(columnName.ToLower()))
+                                            {
+                                                sumValue = _groupData.Sum(s => double.TryParse(s[columnName].ToString(), out tmp) ? tmp : 0);
+                                                countData = _groupData.Count() > 0 ? _groupData.Count() : 1;
+
+                                                cell.SetCellValue(sumValue / countData);
+                                            }
+                                            else
+                                            {
+                                                cell.SetCellValue(value);
+                                            }
+                                        }
+                                        catch
+                                        {
+                                            cell.SetCellValue(value);
+                                        }
+                                    }
+                                    SetFont(cell, _mergeOption.SubTotalFont);
+                                    SetCellBackgroundColor(cell, _mergeOption.CellColor);
+                                }
+                                break;
+                            }
+                        default:
+                            {
+                                for (int i = _mergeOption.MergeColumnFrom; i < row.LastCellNum; i++)
+                                {
+                                    var cell = GetCellByIndex(_sheet, _idxRow, i);
+
+
+                                    string value = "";
+
+                                    if (i == _mergeOption.ColumnIndex)
+                                    {
+                                        switch (_mergeOption.TotalTextType)
+                                        {
+                                            case TotalTextType.NoValue:
+                                                {
+                                                    value = ""; break;
+                                                }
+                                            case TotalTextType.GroupValue:
+                                                {
+                                                    value = _groupValue; break;
+                                                }
+                                            case TotalTextType.GroupValueAndCount:
+                                                {
+                                                    value = _groupValue + ": " + _groupData.Count(); break;
+                                                }
+                                            case TotalTextType.Input:
+                                                {
+                                                    value = string.Format(_mergeOption.TotalText, _groupValue, _groupData.Count()); break;
+                                                }
+                                            default:
+                                                {
+                                                    value = strTotal + _groupValue + ": " + _groupData.Count(); break;
+                                                }
+                                        }
+                                        cell.SetCellValue(value);
+                                    }
+                                    else
+                                    {
+                                        cell.SetCellValue("");
+                                    }
+
+                                    SetFont(cell, _mergeOption.SubTotalFont);
+                                    SetCellBackgroundColor(cell, _mergeOption.CellColor);
+                                }
+                                break;
+                            }
+                    }
+                }
+            }
+
+            if (_mergeOption.MergeColumnFrom >= 0 && _mergeOption.MergeColumnTo >= 0 && _mergeOption.MergeColumnFrom < _mergeOption.MergeColumnTo)
+            {
+                _sheet.AddMergedRegion(new CellRangeAddress(_idxRow, _idxRow, _mergeOption.MergeColumnFrom, _mergeOption.MergeColumnTo));
+            }
+
+            if (_startMerge >= 0 && _endMerge >= 0 && _startMerge < _endMerge)
+            {
+                _sheet.AddMergedRegion(new CellRangeAddress(_startMerge, _endMerge, _mergeOption.ColumnIndex, _mergeOption.ColumnIndex));
+            }
+
+            if (_mergeOption.isHaveRowTotal == true)
+            {
+                _idxRow++;
+            }
+        }
+
+        private void FillData(ISheet _sheet, ICell _cell, DataRow _row, string _text)
+        {
+            var cell = _cell;
+            var cellText = _text;
+            bool isFillData = false;
+
+            //get all variable in string with regex
+            List<string> columnNames = new List<string>();
+            Regex re = new Regex(@"\$[\[](.*?)[\]]");
+            var results = re.Matches(cellText);
+
+            foreach (Match res in results)
+            {
+                columnNames.Add(res.Groups[1].Value.ToLower());
+            }
+
+            foreach (var columnName in columnNames)
+            {
+                try
+                {
+                    if (_row.Table.Columns[columnName].DataType == typeof(byte[]))
+                    {
+                        isFillData = true;
+                        //insert image
+                        if (!cell.IsMergedCell)
+                        {
+                            InsertImageOneCell(_sheet, cell, (byte[])_row[columnName]);
+                        }
+                        else
+                        {
+                            InsertImageMergeCell(_sheet, cell, (byte[])_row[columnName]);
+                        }
+                    }
+                    else
+                    {
+                        isFillData = true;
+                        double temp = 0;
+                        var cellValue = _row[columnName.ToLower()].ToString();
+                        if (dateColumns.Contains(columnName.ToLower()))
+                        {
+                            DateTime d = new DateTime();
+                            try
+                            {
+                                d = DateTime.ParseExact(cellValue, "dd/MM/yyyy", null);
+                                SetCellValue(cell, null, d);
+                            }
+                            catch
+                            {
+                                try
+                                {
+                                    d = DateTime.ParseExact(cellValue, "yyyyMMdd", null);
+                                    SetCellValue(cell, null, d);
+                                }
+                                catch
+                                {
+
+                                    SetCellValue(cell, null, cellValue + "");
+                                }
+                            }
+                        }
+                        else if (double.TryParse(cellValue, out temp) && !excludedColumn.Contains(columnName.ToLower()) && columnNames.Count == 1)
+                        {
+                            SetCellValue(cell, null, temp);
+                        }
+                        else
+                        {
+                            switch (cell.CellType)
+                            {
+                                case CellType.String:
+                                    {
+                                        cellText = cellText.Replace(string.Format("$[{0}]", columnName), _row[columnName].ToString());
+                                        break;
+                                    }
+                                case CellType.Numeric:
+                                    {
+                                        SetCellValue(cell, null, cell.NumericCellValue);
+                                        break;
+                                    }
+                                case CellType.Formula:
+                                    {
+                                        SetCellFormula(cell, null, cell.CellFormula);
+                                        break;
+                                    }
+                                default:
+                                    {
+                                        cellText = cellText.Replace(string.Format("$[{0}]", columnName), _row[columnName].ToString());
+                                        break;
+                                    }
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (cell.CellType == CellType.String && isFillData == true)
+            {
+                SetCellValue(cell, null, cellText);
+            }
+        }
+
+        public void InsertImageOneCell(ISheet _sheet, ICell _cell, byte[] _data)
+        {
+            try
+            {
+                var cellWidth = PixelUtil.widthUnits2Pixel((short)_sheet.GetColumnWidth(_cell.ColumnIndex));
+                var cellHeight = PixelUtil.heightUnits2Pixel(_cell.Row.Height);
+
+                byte[] MyData = _data;
+                MemoryStream stream = new MemoryStream(MyData);
+                Bitmap b = new Bitmap(stream);
+                var avatar = ResizeImage(b, cellWidth, cellHeight);
+
+                Image img = (Image)avatar;
+
+                InsertImage(_sheet, _cell, img, img.Width, img.Height);
+            }
+            catch
+            {
+                //SetCellValue(_cell, null, "No Image");
+            }
+        }
+
+        public void InsertImageMergeCell(ISheet _sheet, ICell _cell, byte[] _data)
+        {
+            var cellWidth = 0;
+            var cellHeight = 0;
+
+            for (int i = 0; i < _sheet.NumMergedRegions; i++)
+            {
+                CellRangeAddress cellRangeAddress = _sheet.GetMergedRegion(i);
+                if (cellRangeAddress.FirstColumn == _cell.ColumnIndex && cellRangeAddress.FirstRow == _cell.RowIndex)
+                {
+                    var firstCell = GetCellByIndex(_sheet, cellRangeAddress.FirstRow, cellRangeAddress.FirstColumn);
+                    var lastCell = GetCellByIndex(_sheet, cellRangeAddress.LastRow, cellRangeAddress.LastColumn);
+
+                    InsertImage(_sheet, _data, firstCell, lastCell);
+                }
+            }
+
+            try
+            {
+                byte[] MyData = _data;
+                MemoryStream stream = new MemoryStream(MyData);
+                Bitmap b = new Bitmap(stream);
+                var avatar = ResizeImage(b, cellWidth, cellHeight);
+
+                Image img = (Image)avatar;
+
+                InsertImage(_sheet, _cell, img, img.Width, img.Height);
+            }
+            catch
+            {
+                //SetCellValue(_cell, null, "No Image");
+            }
+        }
+
+        public ICell GetCellByIndex(ISheet _sheet, int _rowIndex, int _colIndex)
+        {
+            IRow row = null;
+            ICell cell = null;
+
+            row = _sheet.GetRow(_rowIndex);
+            if (row == null) row = _sheet.CreateRow(_rowIndex);
+
+            cell = row.GetCell(_colIndex);
+            if (cell == null) cell = row.CreateCell(_colIndex);
+
+            return cell;
+        }
+
+        public ICell GetCellByAddress(ISheet _sheet, string _address)
+        {
+            ICell cell = null;
+
+            try
+            {
+                Regex re = new Regex(@"([a-zA-Z]+)(\d+)");
+                Match result = re.Match(_address);
+
+                string alphaPart = result.Groups[1].Value;
+                string numberPart = result.Groups[2].Value;
+                int temp = 0;
+
+                int iCol = mapColumnExcel.IndexOf(alphaPart);
+                int iRow = int.TryParse(numberPart, out temp) ? (temp - 1) : -1;
+
+                cell = this.GetCellByIndex(_sheet, iRow, iCol);
+            }
+            catch
+            {
+            }
+
+            return cell;
+        }
+
+        public ICell GetCellByAddress(ISheet _sheet, string _address, int _numRowofRange)
+        {
+            ICell cell = null;
+
+            try
+            {
+                Regex re = new Regex(@"([a-zA-Z]+)(\d+)");
+                Match result = re.Match(_address);
+
+                string alphaPart = result.Groups[1].Value;
+                string numberPart = result.Groups[2].Value;
+                int temp = 0;
+
+                int iCol = mapColumnExcel.IndexOf(alphaPart);
+                int iRow = int.TryParse(numberPart, out temp) ? (temp - 1) : -1;
+
+                cell = this.GetCellByIndex(_sheet, iRow + _numRowofRange, iCol);
+            }
+            catch
+            {
+            }
+
+            return cell;
+        }
+
+        public string GetCellValue(ICell _cell)
+        {
+            string value = "";
+            switch (_cell.CellType)
+            {
+                case CellType.Numeric:
+                    value = _cell.NumericCellValue +"";
+                    break;
+                case CellType.String:
+                    value = _cell.StringCellValue;
+                    break;
+                default:
+                    try { value = _cell.StringCellValue; } catch { }
+                    break;
+            }
+            return value;
+        }
+
+        public void SetCellValue(ICell _cell, ICellStyle _cellStyle, string _value)
+        {
+            _cell.SetCellValue(_value);
+            _cell.RemoveCellComment();
+
+            if (_cellStyle != null)
+                _cell.CellStyle = _cellStyle;
+        }
+
+        public void SetCellValue(ICell _cell, ICellStyle _cellStyle, double _value)
+        {
+            _cell.SetCellValue(_value);
+            _cell.RemoveCellComment();
+
+            if (_cellStyle != null)
+                _cell.CellStyle = _cellStyle;
+        }
+
+        public void SetCellValue(ICell _cell, ICellStyle _cellStyle, bool _value)
+        {
+            _cell.SetCellValue(_value);
+            _cell.RemoveCellComment();
+
+            if (_cellStyle != null)
+                _cell.CellStyle = _cellStyle;
+        }
+
+        public void SetCellValue(ICell _cell, ICellStyle _cellStyle, DateTime _value)
+        {
+            _cell.SetCellValue(_value);
+            _cell.RemoveCellComment();
+
+            if (_cellStyle != null)
+                _cell.CellStyle = _cellStyle;
+        }
+
+        public void SetCellValue(ICell _cell, ICellStyle _cellStyle, IRichTextString _value)
+        {
+            _cell.SetCellValue(_value);
+            _cell.RemoveCellComment();
+
+            if (_cellStyle != null)
+                _cell.CellStyle = _cellStyle;
+        }
+
+        public void SetCellFormula(ICell _cell, ICellStyle _cellStyle, string _formula)
+        {
+            _cell.SetCellFormula(_formula);
+            _cell.RemoveCellComment();
+
+            if (_cellStyle != null)
+                _cell.CellStyle = _cellStyle;
+        }
+
+        public IFont CreateCellFont(string _fontName, float _fontHeight, bool _isBold)
+        {
+            IFont f = this.workBook.CreateFont();
+            f.FontName = _fontName;
+            f.FontHeightInPoints = _fontHeight;
+
+            if (_isBold)
+            {
+                f.Boldweight = (short)FontBoldWeight.Bold;
+            }
+            else
+            {
+                f.Boldweight = (short)FontBoldWeight.Normal;
+            }
+            return f;
+        }
+
+        public IFont CreateCellFont(string _fontName, float _fontHeight, bool _isBold, bool _isItalic, bool _isUnderline)
+        {
+            IFont f = this.workBook.CreateFont();
+            f.FontName = _fontName;
+            f.FontHeightInPoints = _fontHeight;
+
+            if (_isBold)
+            {
+                f.Boldweight = (short)FontBoldWeight.Bold;
+            }
+            else
+            {
+                f.Boldweight = (short)FontBoldWeight.Normal;
+            }
+
+            if (_isItalic)
+            {
+                f.IsItalic = true;
+            }
+            else
+            {
+                f.IsItalic = false;
+            }
+
+            if (_isUnderline)
+            {
+                f.Underline = FontUnderlineType.Single;
+            }
+            else
+            {
+                f.Underline = FontUnderlineType.None;
+            }
+
+            return f;
+        }
+
+        public void SetCellBackgroundColor(ICell _cell, byte[] _color)
+        {
+            var color = new XSSFColor(_color);
+            var style = (XSSFCellStyle)this.workBook.CreateCellStyle();
+            style.CloneStyleFrom(_cell.CellStyle);
+
+            style.SetFillForegroundColor(color);
+            style.FillPattern = FillPattern.SolidForeground;
+
+            _cell.CellStyle = style;
+        }
+
+        public void SetCellBackgroundColor(ICell _cell, Color _color)
+        {
+            var color = new XSSFColor(new byte[] { _color.R, _color.G, _color.B});
+            var style = (XSSFCellStyle)this.workBook.CreateCellStyle();
+            style.CloneStyleFrom(_cell.CellStyle);
+
+            style.SetFillForegroundColor(color);
+            style.FillPattern = FillPattern.SolidForeground;
+
+            _cell.CellStyle = style;
+        }
+
+        
+        public void SetBackgroundColor(ISheet _sheet, string  _range, Color _color)
+        {
+            var color = new XSSFColor(new byte[] { _color.R, _color.G, _color.B });
+
+            SetBackgroundColor(_sheet, _range, color);
+        }
+
+        public void SetBackgroundColor(ISheet _sheet, string _range, byte[] _color)
+        {
+            var color = new XSSFColor(_color);
+
+            SetBackgroundColor(_sheet, _range, color);
+        }
+
+        public void SetBackgroundColor(ISheet _sheet, string _range, XSSFColor _color)
+        {
+            var color = _color;
+            var style = (XSSFCellStyle)this.workBook.CreateCellStyle();
+
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            for (var i = startCell.RowIndex; i <= endCell.RowIndex; i++)
+            {
+
+                for (var j = startCell.ColumnIndex; j <= endCell.ColumnIndex; j++)
+                {
+                    ICell _cell = GetCellByIndex(_sheet, i, j);
+                    SetBackgroundColor(_cell, color);
+                }
+            }
+        }
+
+        public void SetBackgroundColor(ICell _cell, byte[] _color)
+        {
+            var color = new XSSFColor(_color);
+
+            SetBackgroundColor(_cell, color);
+        }
+
+        public void SetBackgroundColor(ICell _cell, Color _color)
+        {
+            var color = new XSSFColor(new byte[] { _color.R, _color.G, _color.B });
+
+            SetBackgroundColor(_cell, color);
+        }
+
+        public void SetBackgroundColor(ICell _cell, XSSFColor _color)
+        {
+            var color = _color;
+            var style = (XSSFCellStyle)this.workBook.CreateCellStyle();
+            style.CloneStyleFrom(_cell.CellStyle);
+
+            style.SetFillForegroundColor(color);
+            style.FillPattern = FillPattern.SolidForeground;
+
+            _cell.CellStyle = style;
+        }
+
+
+
+        public void SetFont(ICell _cell, IFont _font)
+        {
+            ICellStyle style = workBook.CreateCellStyle();
+            style.CloneStyleFrom(_cell.CellStyle);
+            style.SetFont(_font);
+            _cell.CellStyle = style;
+        }
+
+        /// <summary>
+        /// _horizontalAlignment: left, right, center;
+        /// _verticalAlignment: top, middle, bottom
+        /// </summary>
+        public ICellStyle CreateCellStyle(string _stringFormat, string _horizontalAlignment, string _verticalAlignment, IFont _font, bool _haveBorder)
+        {
+            IWorkbook workbook = this.workBook;
+            var style = workbook.CreateCellStyle();
+
+            if (_haveBorder)
+            {
+                style.BorderBottom = BorderStyle.Thin;
+                style.BorderLeft = BorderStyle.Thin;
+                style.BorderRight = BorderStyle.Thin;
+                style.BorderTop = BorderStyle.Thin;
+                style.BottomBorderColor = HSSFColor.Black.Index;
+                style.LeftBorderColor = HSSFColor.Black.Index;
+                style.RightBorderColor = HSSFColor.Black.Index;
+                style.TopBorderColor = HSSFColor.Black.Index;
+            }
+
+            style.SetFont(_font);
+
+            //ALIGN
+            if (!string.IsNullOrEmpty(_horizontalAlignment))
+            {
+                switch (_horizontalAlignment)
+                {
+                    case "left":
+                        style.Alignment = HorizontalAlignment.Left; break;
+                    case "center":
+                        style.Alignment = HorizontalAlignment.Center; break;
+                    case "right":
+                        style.Alignment = HorizontalAlignment.Right; break;
+                }
+            }
+
+            if (!string.IsNullOrEmpty(_verticalAlignment))
+            {
+                switch (_verticalAlignment)
+                {
+                    case "top":
+                        style.VerticalAlignment = VerticalAlignment.Top; break;
+                    case "middle":
+                        style.VerticalAlignment = VerticalAlignment.Center; break;
+                    case "bottom":
+                        style.VerticalAlignment = VerticalAlignment.Bottom; break;
+                }
+            }
+
+            //Data format
+            if (!string.IsNullOrEmpty(_stringFormat))
+            {
+                style.DataFormat = HSSFDataFormat.GetBuiltinFormat(_stringFormat);
+            }
+
+            return style;
+        }
+
+        private void CloneRow(XSSFWorkbook workbook, ISheet worksheet, int sourceRowNum, int destinationRowNum)
+        {
+            // Get the source / new row
+            var newRow = worksheet.GetRow(destinationRowNum);
+            var sourceRow = worksheet.GetRow(sourceRowNum);
+
+            if (sourceRow == null) sourceRow = worksheet.CreateRow(sourceRowNum);
+
+            try
+            {
+                newRow = worksheet.CreateRow(destinationRowNum);
+            }
+            catch { }
+
+            //Set newRow height equal sourceRow
+            newRow.Height = sourceRow.Height;
+            newRow.Hidden = sourceRow.Hidden;
+            // Loop through source columns to add to new row
+            for (int i = 0; i < sourceRow.LastCellNum; i++)
+            {
+                // Grab a copy of the old/new cell
+                var oldCell = sourceRow.GetCell(i);
+                var newCell = newRow.CreateCell(i);
+
+                // If the old cell is null jump to next cell
+                if (oldCell == null)
+                {
+                    newCell = null;
+                    continue;
+                }
+
+                // Copy style from old cell and apply to new cell
+                newCell.CellStyle = oldCell.CellStyle;
+                // Set the cell data type
+                newCell.SetCellType(oldCell.CellType);
+
+                // Set the cell data value
+                switch (oldCell.CellType)
+                {
+                    case CellType.Blank:
+                        newCell.SetCellValue(oldCell.RichStringCellValue);
+                        break;
+
+                    case CellType.Boolean:
+                        newCell.SetCellValue(oldCell.BooleanCellValue);
+                        break;
+
+                    case CellType.Error:
+                        newCell.SetCellErrorValue(oldCell.ErrorCellValue);
+                        break;
+
+                    case CellType.Formula:
+                        newCell.SetCellFormula(oldCell.CellFormula);
+                        break;
+
+                    case CellType.Numeric:
+                        newCell.SetCellValue(oldCell.NumericCellValue);
+                        break;
+
+                    case CellType.String:
+                        newCell.SetCellValue(oldCell.RichStringCellValue);
+                        break;
+                }
+            }
+
+            // If there are are any merged regions in the source row, copy to new row
+            for (int i = 0; i < worksheet.NumMergedRegions; i++)
+            {
+                CellRangeAddress cellRangeAddress = worksheet.GetMergedRegion(i);
+                if (cellRangeAddress.FirstRow == sourceRow.RowNum)
+                {
+                    CellRangeAddress newCellRangeAddress = new CellRangeAddress(
+                                                                                newRow.RowNum,
+                                                                                (newRow.RowNum + (cellRangeAddress.LastRow - cellRangeAddress.FirstRow)),
+                                                                                cellRangeAddress.FirstColumn,
+                                                                                cellRangeAddress.LastColumn
+                                                                                );
+                    if (newCellRangeAddress.FirstColumn == cellRangeAddress.FirstColumn && newCellRangeAddress.LastColumn == cellRangeAddress.LastColumn
+                        && newCellRangeAddress.FirstRow == cellRangeAddress.FirstRow && newCellRangeAddress.LastRow == cellRangeAddress.LastRow) continue;
+                    worksheet.AddMergedRegion(newCellRangeAddress);
+                }
+            }
+        }
+
+        private void CloneRow2(XSSFWorkbook workbook, ISheet worksheet, int sourceRowNum, int destinationRowNum, DataTable _dataTable, int _rowIndex, bool _isLastRow, int _mergeIndex)
+        {
+            // Get the source / new row
+            var newRow = worksheet.GetRow(destinationRowNum);
+            var sourceRow = worksheet.GetRow(sourceRowNum);
+
+            if (sourceRow == null) sourceRow = worksheet.CreateRow(sourceRowNum);
+
+            try
+            {
+                newRow = worksheet.CreateRow(destinationRowNum);
+            }
+            catch { }
+
+            //Set newRow height equal sourceRow
+            newRow.Height = sourceRow.Height;
+            newRow.Hidden = sourceRow.Hidden;
+            // Loop through source columns to add to new row
+            for (int i = 0; i < sourceRow.LastCellNum; i++)
+            {
+                // Grab a copy of the old/new cell
+                var oldCell = sourceRow.GetCell(i);
+                var newCell = newRow.CreateCell(i);
+
+                // If the old cell is null jump to next cell
+                if (oldCell == null)
+                {
+                    newCell = null;
+                    continue;
+                }
+
+                // Copy style from old cell and apply to new cell
+                newCell.CellStyle = oldCell.CellStyle;
+                // Set the cell data type
+                newCell.SetCellType(oldCell.CellType);
+
+                // Set the cell data value
+                switch (oldCell.CellType)
+                {
+                    case CellType.Blank:
+                        //newCell.SetCellValue(oldCell.RichStringCellValue);
+                        break;
+
+                    case CellType.Boolean:
+                        newCell.SetCellValue(oldCell.BooleanCellValue);
+                        break;
+
+                    case CellType.Error:
+                        newCell.SetCellErrorValue(oldCell.ErrorCellValue);
+                        break;
+
+                    case CellType.Formula:
+                        newCell.SetCellFormula(oldCell.CellFormula);
+                        break;
+
+                    case CellType.Numeric:
+                        newCell.SetCellValue(oldCell.NumericCellValue);
+                        break;
+
+                    case CellType.String:
+                        newCell.SetCellValue(oldCell.RichStringCellValue);
+                        break;
+                }
+
+                if (!_isLastRow)
+                {
+                    //replace old cell
+                    if (ignoreCells.Contains(oldCell))
+                        continue;
+                    string cellText = oldCell.CellType == CellType.String ? oldCell.StringCellValue : "";
+
+                    FillData(worksheet, oldCell, _dataTable.Rows[_rowIndex], cellText);
+                }
+            }
+            // If there are are any merged regions in the source row, copy to new row
+            for (int i = listMergeRegion.Count - 1; i >= _mergeIndex; i--)
+            {
+                CellRangeAddress cellRangeAddress = listMergeRegion[i];
+                if (cellRangeAddress.FirstRow == sourceRow.RowNum)
+                {
+                    CellRangeAddress newCellRangeAddress = new CellRangeAddress(
+                                                                                newRow.RowNum,
+                                                                                (newRow.RowNum + (cellRangeAddress.LastRow - cellRangeAddress.FirstRow)),
+                                                                                cellRangeAddress.FirstColumn,
+                                                                                cellRangeAddress.LastColumn
+                                                                                );
+                    if (newCellRangeAddress.FirstColumn == cellRangeAddress.FirstColumn && newCellRangeAddress.LastColumn == cellRangeAddress.LastColumn
+                        && newCellRangeAddress.FirstRow == cellRangeAddress.FirstRow && newCellRangeAddress.LastRow == cellRangeAddress.LastRow)
+                        continue;
+
+                    worksheet.AddMergedRegion(newCellRangeAddress);
+                    listMergeRegion.Add(newCellRangeAddress);
+                }
+            }
+        }
+
+        private void CloneRow3(XSSFWorkbook workbook, ISheet worksheet, int sourceRowNum, int destinationRowNum, int _rowIndex, bool _isLastRow)
+        {
+            // Get the source / new row
+            var newRow = worksheet.GetRow(destinationRowNum);
+            var sourceRow = worksheet.GetRow(sourceRowNum);
+
+            if (sourceRow == null) sourceRow = worksheet.CreateRow(sourceRowNum);
+
+            try
+            {
+                newRow = worksheet.CreateRow(destinationRowNum);
+            }
+            catch { }
+
+            //Set newRow height equal sourceRow
+            newRow.Height = sourceRow.Height;
+            newRow.Hidden = sourceRow.Hidden;
+            // Loop through source columns to add to new row
+            for (int i = 0; i < sourceRow.LastCellNum; i++)
+            {
+                // Grab a copy of the old/new cell
+                var oldCell = sourceRow.GetCell(i);
+                var newCell = newRow.CreateCell(i);
+
+                // If the old cell is null jump to next cell
+                if (oldCell == null)
+                {
+                    newCell = null;
+                    continue;
+                }
+
+                // Copy style from old cell and apply to new cell
+                newCell.CellStyle = oldCell.CellStyle;
+                // Set the cell data type
+                newCell.SetCellType(oldCell.CellType);
+
+                // Set the cell data value
+                switch (oldCell.CellType)
+                {
+                    case CellType.Blank:
+                        //newCell.SetCellValue(oldCell.RichStringCellValue);
+                        break;
+
+                    case CellType.Boolean:
+                        newCell.SetCellValue(oldCell.BooleanCellValue);
+                        break;
+
+                    case CellType.Error:
+                        newCell.SetCellErrorValue(oldCell.ErrorCellValue);
+                        break;
+
+                    case CellType.Formula:
+                        newCell.SetCellFormula(oldCell.CellFormula);
+                        break;
+
+                    case CellType.Numeric:
+                        newCell.SetCellValue(oldCell.NumericCellValue);
+                        break;
+
+                    case CellType.String:
+                        newCell.SetCellValue(oldCell.RichStringCellValue);
+                        break;
+                }
+
+                if (!_isLastRow)
+                {
+                    //replace old cell
+                    if (ignoreCells.Contains(oldCell))
+                        continue;
+                    string cellText = oldCell.CellType == CellType.String ? oldCell.StringCellValue : "";
+                }
+            }            
+        }
+
+        public void MoveRow(ISheet _sheet, int _rowIndex, int _rowMoveTo)
+        {
+            CloneRow(workBook, _sheet, _rowIndex, _rowMoveTo);
+
+            var sourceRow = _sheet.GetRow(_rowIndex);
+            if (sourceRow != null)
+            {
+                for (int i = 0; i < sourceRow.LastCellNum; i++)
+                {
+                    var cell = sourceRow.GetCell(i);
+                    if (cell == null) continue;
+
+                    cell.SetCellValue("");
+                    var newCellStyle = workBook.CreateCellStyle();
+                    cell.CellStyle = newCellStyle;
+                }
+            }
+
+            //Delete merge of source row
+            for (int i = 0; i < _sheet.NumMergedRegions; i++)
+            {
+                CellRangeAddress cellRangeAddress = _sheet.GetMergedRegion(i);
+
+                if (cellRangeAddress.FirstRow == _rowIndex)
+                {
+                    _sheet.RemoveMergedRegion(i);
+                    i -= 1;
+                }
+            }
+        }
+
+        public void InsertImage(ISheet _sheet, ICell _cell, byte[] _image, double? _imageWidth, double? _imageHeight)
+        {
+            byte[] data = _image;
+            int picInd = workBook.AddPicture(data, XSSFWorkbook.PICTURE_TYPE_JPG);
+            XSSFCreationHelper helper = workBook.GetCreationHelper() as XSSFCreationHelper;
+            XSSFDrawing drawing = _sheet.CreateDrawingPatriarch() as XSSFDrawing;
+            XSSFClientAnchor anchor = helper.CreateClientAnchor() as XSSFClientAnchor;
+            anchor.AnchorType = AnchorType.MoveAndResize;
+            anchor.Col1 = _cell.ColumnIndex;
+            anchor.Row1 = _cell.RowIndex;
+            XSSFPicture pict = drawing.CreatePicture(anchor, picInd) as XSSFPicture;
+            var width = _sheet.GetColumnWidthInPixels(_cell.ColumnIndex);
+            var height = _sheet.GetRow(_cell.RowIndex).HeightInPoints;
+
+            var ScaleX = convertPixelToScale(width, _imageWidth == null ? width : (double)_imageWidth);
+            var ScaleY = convertPixelToScale(height, _imageHeight == null ? height : (double)_imageHeight);
+
+            pict.Resize(ScaleX, ScaleY);
+
+            SetCellValue(_cell, null, "");
+        }
+
+        public void InsertImage(ISheet _sheet, byte[] _image, ICell _startCell, ICell _endCell)
+        {
+            int picInd = workBook.AddPicture(_image, XSSFWorkbook.PICTURE_TYPE_JPG);
+            XSSFCreationHelper helper = workBook.GetCreationHelper() as XSSFCreationHelper;
+            XSSFDrawing drawing = _sheet.CreateDrawingPatriarch() as XSSFDrawing;
+            XSSFClientAnchor anchor = helper.CreateClientAnchor() as XSSFClientAnchor;
+            anchor.AnchorType = AnchorType.MoveAndResize;
+            anchor.Col1 = _startCell.ColumnIndex;
+            anchor.Row1 = _startCell.RowIndex;
+            anchor.Col2 = _endCell.ColumnIndex + 1;
+            anchor.Row2 = _endCell.RowIndex + 1;
+
+            anchor.Dx1 = 10000;
+            anchor.Dy1 = 10000;
+
+            XSSFPicture pict = drawing.CreatePicture(anchor, picInd) as XSSFPicture;
+
+            SetCellValue(_startCell, null, "");
+        }
+
+        public void InsertImage(ISheet _sheet, ICell _cell, Image _image, double? _imageWidth, double? _imageHeight)
+        {
+            byte[] imageBytes;
+            using (MemoryStream m = new MemoryStream())
+            {
+                _image.Save(m, ImageFormat.Png);
+                imageBytes = new byte[m.Length];
+                //Very Important
+                imageBytes = m.ToArray();
+            }//end using
+
+            int picInd = workBook.AddPicture(imageBytes, XSSFWorkbook.PICTURE_TYPE_JPG);
+            XSSFCreationHelper helper = workBook.GetCreationHelper() as XSSFCreationHelper;
+            XSSFDrawing drawing = _sheet.CreateDrawingPatriarch() as XSSFDrawing;
+            XSSFClientAnchor anchor = helper.CreateClientAnchor() as XSSFClientAnchor;
+            anchor.AnchorType = AnchorType.MoveAndResize;
+            anchor.Col1 = _cell.ColumnIndex;
+            anchor.Row1 = _cell.RowIndex;
+            XSSFPicture pict = drawing.CreatePicture(anchor, picInd) as XSSFPicture;
+            var width = _sheet.GetColumnWidthInPixels(_cell.ColumnIndex);
+            var height = _sheet.GetRow(_cell.RowIndex).HeightInPoints;
+
+            var ScaleX = convertPixelToScale(width, _imageWidth == null ? width : (double)_imageWidth);
+            var ScaleY = convertPixelToScale(height, _imageHeight == null ? height : (double)_imageHeight);
+
+            pict.Resize(ScaleX, ScaleY);
+
+
+
+            SetCellValue(_cell, null, "");
+        }
+
+        public void InsertImage(ISheet _sheet, Image _image, ICell _startCell, ICell _endCell)
+        {
+            byte[] imageBytes;
+            using (MemoryStream m = new MemoryStream())
+            {
+                _image.Save(m, ImageFormat.Png);
+                imageBytes = new byte[m.Length];
+                //Very Important
+                imageBytes = m.ToArray();
+            }//end using
+
+            int picInd = workBook.AddPicture(imageBytes, XSSFWorkbook.PICTURE_TYPE_JPG);
+            XSSFCreationHelper helper = workBook.GetCreationHelper() as XSSFCreationHelper;
+            XSSFDrawing drawing = _sheet.CreateDrawingPatriarch() as XSSFDrawing;
+            XSSFClientAnchor anchor = helper.CreateClientAnchor() as XSSFClientAnchor;
+            anchor.AnchorType = AnchorType.MoveAndResize;
+            anchor.Col1 = _startCell.ColumnIndex;
+            anchor.Row1 = _startCell.RowIndex;
+            anchor.Col2 = _endCell.ColumnIndex + 1;
+            anchor.Row2 = _endCell.RowIndex + 1;
+            XSSFPicture pict = drawing.CreatePicture(anchor, picInd) as XSSFPicture;
+
+            SetCellValue(_startCell, null, "");
+        }
+
+        public void InsertTextBox(ISheet _sheet, string _range, TextAlign _horizontalAlignment, VerticalAlignment _verticalAlignment, XSSFRichTextString _text)
+        {
+            string[] cells = _range.Split(':');
+            if (cells.Length != 2) return;
+
+            var startCell = GetCellByAddress(_sheet, cells[0]);
+            var endCell = GetCellByAddress(_sheet, cells[1]);
+
+            XSSFDrawing drawing = _sheet.CreateDrawingPatriarch() as XSSFDrawing;
+            var anchor = drawing.CreateAnchor(0, 0, 0, 0, startCell.ColumnIndex, startCell.RowIndex, endCell.ColumnIndex + 1, endCell.RowIndex + 1);
+            //anchor.AnchorType = AnchorType.MoveDontResize;
+            anchor.AnchorType = AnchorType.MoveAndResize;
+            XSSFTextBox textBox = drawing.CreateTextbox(anchor) as XSSFTextBox;
+            textBox.VerticalAlignment = _verticalAlignment;
+            textBox.SetText(_text);
+            startCell.CellStyle.Alignment = HorizontalAlignment.Center;
+
+            foreach (var p in textBox.TextParagraphs)
+            {
+                p.TextAlign = _horizontalAlignment;
+            }
+        }
+
+        public void DeleteColumn(ISheet sheet, int columnIndex)
+        {
+            // Lưu danh sách các vùng merge để xử lý sau
+            List<CellRangeAddress> mergedRegions = new List<CellRangeAddress>();
+
+            // Lưu các vùng merge hiện tại và xóa chúng
+            for (int i = 0; i < sheet.NumMergedRegions; i++)
+            {
+                CellRangeAddress region = sheet.GetMergedRegion(i);
+                mergedRegions.Add(region);
+            }
+
+            // Xóa tất cả các vùng merge
+            while (sheet.NumMergedRegions > 0)
+            {
+                sheet.RemoveMergedRegion(0);
+            }
+
+            // Duyệt qua từng hàng để xóa cột
+            for (int i = 0; i <= sheet.LastRowNum; i++)
+            {
+                IRow row = sheet.GetRow(i);
+                if (row != null)
+                {
+                    // Xóa ô tại vị trí cột cần xóa
+                    if (row.GetCell(columnIndex) != null)
+                        row.RemoveCell(row.GetCell(columnIndex));
+
+                    // Di chuyển tất cả các ô bên phải sang trái một cột
+                    for (int j = columnIndex + 1; j <= row.LastCellNum; j++)
+                    {
+                        ICell oldCell = row.GetCell(j);
+                        if (oldCell != null)
+                        {
+                            ICell newCell = row.CreateCell(j - 1, oldCell.CellType);
+
+                            // Sao chép giá trị
+                            switch (oldCell.CellType)
+                            {
+                                case CellType.String:
+                                    newCell.SetCellValue(oldCell.StringCellValue);
+                                    break;
+                                case CellType.Numeric:
+                                    newCell.SetCellValue(oldCell.NumericCellValue);
+                                    break;
+                                case CellType.Boolean:
+                                    newCell.SetCellValue(oldCell.BooleanCellValue);
+                                    break;
+                                case CellType.Formula:
+                                    newCell.SetCellFormula(oldCell.CellFormula);
+                                    break;
+                                case CellType.Error:
+                                    newCell.SetCellErrorValue(oldCell.ErrorCellValue);
+                                    break;
+                                    // Các trường hợp khác...
+                            }
+
+                            // Sao chép style
+                            newCell.CellStyle = oldCell.CellStyle;
+
+                            // Xóa ô cũ
+                            row.RemoveCell(oldCell);
+                        }
+                    }
+                }
+            }
+
+            // Tạo lại các vùng merge với điều chỉnh cho cột đã xóa
+            foreach (CellRangeAddress region in mergedRegions)
+            {
+                // Tính toán vị trí mới cho vùng merge
+                int firstCol = region.FirstColumn;
+                int lastCol = region.LastColumn;
+                int firstRow = region.FirstRow;
+                int lastRow = region.LastRow;
+
+                // Nếu vùng merge hoàn toàn nằm bên phải cột bị xóa, dịch sang trái 1 cột
+                if (firstCol > columnIndex)
+                {
+                    firstCol--;
+                    lastCol--;
+                }
+                // Nếu vùng merge bao gồm cột bị xóa
+                else if (firstCol <= columnIndex && lastCol >= columnIndex)
+                {
+                    // Cột bị xóa nằm trong vùng merge, thu hẹp vùng merge
+                    lastCol--;
+
+                    // Nếu sau khi thu hẹp, vùng merge chỉ còn 1 ô, không cần tạo merge
+                    if (firstCol == lastCol || firstRow == lastRow)
+                        continue;
+                }
+
+                // Nếu vùng merge vẫn hợp lệ, tạo lại
+                if (firstCol <= lastCol && firstRow <= lastRow)
+                {
+                    CellRangeAddress newRegion = new CellRangeAddress(firstRow, lastRow, firstCol, lastCol);
+                    sheet.AddMergedRegion(newRegion);
+                }
+            }
+        }
+        private double convertPixelToScale(double iSource, double iInsert)
+        {
+            return iInsert / (iSource == 0 ? 1 : iSource);
+        }
+
+        //public static Bitmap ResizeImage(Bitmap d, int w, int h)
+        //{
+        //    Bitmap q = new Bitmap(w, h);
+        //    float f, g;
+        //    f = (float)w / (float)d.Width;
+        //    g = (float)h / (float)d.Height;
+        //    for (int i = 0; i < w; i++)
+        //    {
+        //        for (int j = 0; j < h; j++)
+        //        {
+        //            Color c;
+        //            c = d.GetPixel((int)(i / f), (int)(j / g));
+        //            q.SetPixel(i, j, c);
+        //        }
+        //    }
+        //    return q;
+        //}
+
+        public static Bitmap ResizeImage(Bitmap bmp, int maxWidth, int maxHeight)
+        {
+            var ratioX = (double)maxWidth / bmp.Width;
+            var ratioY = (double)maxHeight / bmp.Height;
+            var ratio = Math.Min(ratioX, ratioY);
+
+            var newWidth = (int)(bmp.Width * ratioX);
+            var newHeight = (int)(bmp.Height * ratioY);
+
+            var newImage = new Bitmap(newWidth, newHeight);
+
+            using (var graphics = Graphics.FromImage(newImage))
+            {
+                graphics.SmoothingMode = SmoothingMode.HighQuality;
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                graphics.DrawImage(bmp, 0, 0, newWidth, newHeight);
+            }
+
+            return newImage;
+        }
+
+        private XSSFWorkbook LoadFile()
+        {
+            XSSFWorkbook _document;
+            using (var file = new FileStream(workBookPath, FileMode.Open, FileAccess.Read))
+            {
+                _document = new XSSFWorkbook(file);
+            }
+            return _document;
+        }
+
+
+        public string WriteDoc()
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+
+            using (FileStream fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            {
+                workBook.Write(fs);
+                fs.Close();
+            }
+
+            workBook.Close();
+            return tempPath;
+        }
+
+        public string WriteDoc(string password)
+        {
+            //insert password
+            for (int i = 0; i < workBook.NumberOfSheets; i++)
+            {
+                var sh = workBook.GetSheetAt(i);
+                sh.ProtectSheet(password);
+            }
+
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+
+            using (FileStream fs = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            {
+                workBook.Write(fs);
+                fs.Close();
+            }
+
+            workBook.Close();
+            return tempPath;
+        }
+    }
+
+    public class PixelUtil
+    {
+        public const short EXCEL_COLUMN_WIDTH_FACTOR = 256;
+        public const short EXCEL_ROW_HEIGHT_FACTOR = 20;
+        public const int UNIT_OFFSET_LENGTH = 7;
+        public static readonly short[] UNIT_OFFSET_MAP = new short[] { 0, 36, 73, 109, 146, 182, 219 };
+
+        public static short pixel2WidthUnits(int pxs)
+        {
+            short widthUnits = (short)(EXCEL_COLUMN_WIDTH_FACTOR * (pxs / UNIT_OFFSET_LENGTH));
+            widthUnits += UNIT_OFFSET_MAP[(pxs % UNIT_OFFSET_LENGTH)];
+            return widthUnits;
+        }
+
+        public static int widthUnits2Pixel(short widthUnits)
+        {
+            double pixels = (widthUnits / EXCEL_COLUMN_WIDTH_FACTOR) * UNIT_OFFSET_LENGTH;
+            int offsetWidthUnits = widthUnits % EXCEL_COLUMN_WIDTH_FACTOR;
+            pixels += Math.Floor((float)offsetWidthUnits / ((float)EXCEL_COLUMN_WIDTH_FACTOR / UNIT_OFFSET_LENGTH));
+            return (int)pixels;
+        }
+
+        public static int heightUnits2Pixel(short heightUnits)
+        {
+            double pixels = (heightUnits / EXCEL_ROW_HEIGHT_FACTOR);
+            int offsetWidthUnits = heightUnits % EXCEL_ROW_HEIGHT_FACTOR;
+            pixels += Math.Floor((float)offsetWidthUnits / ((float)EXCEL_ROW_HEIGHT_FACTOR / UNIT_OFFSET_LENGTH));
+            return (int)pixels;
+        }
+    }
+}
