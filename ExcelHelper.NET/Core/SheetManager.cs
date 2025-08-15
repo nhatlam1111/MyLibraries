@@ -164,7 +164,7 @@ public class SheetManager
     /// <summary>
     /// Chèn dữ liệu từ DataTable vào range với merge support
     /// </summary>
-    public void InsertDataToRange<T>(DataTable dataTable, string range, bool preserveMerge = true) 
+    public void InsertDataToRange<T>(DataTable dataTable, string range) 
         where T : new()
     {
         if (dataTable == null || dataTable.Rows.Count == 0) return;
@@ -173,29 +173,19 @@ public class SheetManager
         var data = DataTableAdapter.ToList<T>(dataTable);
         var dataProvider = new GenericDataProvider<T>();
         
-        InsertDataToRange(data, range, dataProvider, preserveMerge);
+        InsertDataToRange(data, range, dataProvider);
     }
 
     /// <summary>
     /// Chèn dữ liệu vào một range cụ thể
     /// </summary>
     public void InsertDataToRange<T>(IEnumerable<T> data, string range,
-                                    IExcelDataProvider<T>? dataProvider = null, bool preserveMerge = true)
+                                    IExcelDataProvider<T>? dataProvider = null)
     {
         var dataList = data.ToList();
         if (!dataList.Any()) return;
 
         dataProvider ??= new GenericDataProvider<T>();
-
-        // Tạo các range copies với hoặc không merge
-        if (preserveMerge)
-        {
-            _rangeManager.CreateRangesWithMerge(range, dataList.Count);
-        }
-        else
-        {
-            _rangeManager.CreateRanges(range, dataList.Count);
-        }
 
         var cells = range.Split(':');
         if (cells.Length != 2) return;
@@ -207,12 +197,45 @@ public class SheetManager
 
         var rangeRowCount = endCell.RowIndex - startCell.RowIndex + 1;
 
+        // Lưu và clear merge regions để tối ưu tốc độ (tương tự InsertData)
+        List<MergeRegion> mergeRegions = new List<MergeRegion>();
+        var templateMergeRegions = new List<MergeRegion>();
+        var otherMergeRegions = new List<MergeRegion>();
+        mergeRegions = _mergeManager.GetAllMergeRegions();
+        _mergeManager.ClearAllMergeRegions();
+
+        foreach (var mr in mergeRegions)
+        {
+            if (mr.FirstRow >= startCell.RowIndex && mr.LastRow <= endCell.RowIndex &&
+                        mr.FirstColumn >= startCell.ColumnIndex && mr.LastColumn <= endCell.ColumnIndex)
+            {
+                templateMergeRegions.Add(mr);
+            }
+            else
+            {
+                otherMergeRegions.Add(mr);
+            }
+        }
+       
+        // Tạo các range copies
+        _rangeManager.CreateRanges(range, dataList.Count);
+
         // Fill data vào từng range
         for (int i = 0; i < dataList.Count; i++)
         {
             var rangeStartRow = startCell.RowIndex + i * rangeRowCount;
             FillRangeData(dataList[i], rangeStartRow, rangeStartRow + rangeRowCount - 1, dataProvider);
+
+            // Copy merge regions cho range thứ i (trừ range đầu tiên vì đã có sẵn)
+            if (templateMergeRegions.Any())
+            {
+                var rowOffset = i * rangeRowCount;
+                RestoreMergeRegions(templateMergeRegions, rowOffset);
+            }
         }
+        
+        // Khôi phục merge regions khác
+        RestoreMergeRegions(otherMergeRegions, 0);
     }
 
     /// <summary>
@@ -373,27 +396,4 @@ public class SheetManager
     {
         _sheet.DeleteColumn(columnIndex);
     }
-
-    /// <summary>
-    /// Copy một range đến vị trí khác với xử lý merge cells
-    /// </summary>
-    public void CopyRangeWithMerge(string sourceRange, int targetStartRow)
-    {
-        var cells = sourceRange.Split(':');
-        if (cells.Length != 2) return;
-
-        var startCell = _sheet.GetCellByAddress(cells[0]);
-        var endCell = _sheet.GetCellByAddress(cells[1]);
-        
-        if (startCell == null || endCell == null) return;
-
-        // Thu thập merge regions trong source range
-        var sourceMergeRegions = _mergeManager.GetMergeRegionsInRange(
-            startCell.RowIndex, endCell.RowIndex, 
-            startCell.ColumnIndex, endCell.ColumnIndex);
-
-        // Copy range với merge
-        _rangeManager.CopyRangeWithMerge(startCell, endCell, targetStartRow, sourceMergeRegions);
-    }
-
 }

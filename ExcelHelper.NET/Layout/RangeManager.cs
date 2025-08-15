@@ -116,52 +116,6 @@ public class RangeManager
     }
 
     /// <summary>
-    /// Tạo nhiều bản copy của một range với xử lý merge cells (performance version)
-    /// </summary>
-    public void CreateRangesWithMerge(string sourceRange, int count)
-    {
-        var cells = sourceRange.Split(':');
-        if (cells.Length != 2) return;
-
-        var startCell = _sheet.GetCellByAddress(cells[0]);
-        var endCell = _sheet.GetCellByAddress(cells[1]);
-        
-        if (startCell == null || endCell == null) return;
-
-        var rangeRowCount = endCell.RowIndex - startCell.RowIndex + 1;
-        var totalRowsNeeded = rangeRowCount * count;
-        var rowsToMove = _sheet.LastRowNum - endCell.RowIndex;
-
-        // Thu thập thông tin merge regions trong source range
-        var sourceMergeRegions = new List<CellRangeAddress>();
-        for (int i = 0; i < _sheet.NumMergedRegions; i++)
-        {
-            var region = _sheet.GetMergedRegion(i);
-            if (region.FirstRow >= startCell.RowIndex && region.LastRow <= endCell.RowIndex)
-            {
-                sourceMergeRegions.Add(region);
-            }
-        }
-
-        // Di chuyển các dòng hiện có xuống dưới
-        if (count > 1 && rowsToMove > 0)
-        {
-            for (int i = rowsToMove; i >= 1; i--)
-            {
-                _sheet.MoveRow(endCell.RowIndex + i, endCell.RowIndex + i + totalRowsNeeded - rangeRowCount);
-            }
-        }
-
-        // Tạo các bản copy với merge regions
-        var copyStartRow = endCell.RowIndex + 1;
-        for (int i = 0; i < count - 1; i++) // Trừ 1 vì đã có bản gốc
-        {
-            var targetStartRow = copyStartRow + i * rangeRowCount;
-            CopyRangeWithMerge(startCell, endCell, targetStartRow, sourceMergeRegions);
-        }
-    }
-
-    /// <summary>
     /// Clear nội dung của một range
     /// </summary>
     public void ClearRange(string range)

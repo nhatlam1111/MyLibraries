@@ -44,7 +44,6 @@ public class RowManager
         _sheet.MoveRow(sourceRowIndex, targetRowIndex);
     }
 
-
     /// <summary>
     /// Xóa một dòng
     /// </summary>

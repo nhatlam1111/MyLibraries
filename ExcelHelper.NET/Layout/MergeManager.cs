@@ -26,8 +26,6 @@ public class MergeManager
 
         var (startRow, startCol) = Utils.ExcelAddressConverter.AddressToIndices(cells[0]);
         var (endRow, endCol) = Utils.ExcelAddressConverter.AddressToIndices(cells[1]);
-        
-        MergeCells(startRow, endRow, startCol, endCol);
     }
 
     /// <summary>
