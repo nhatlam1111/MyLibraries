@@ -100,7 +100,7 @@ public static class SheetExtensions
             var targetCell = targetRow.GetCell(i) ?? targetRow.CreateCell(i);
             
             // Copy cell value and style
-            CopyCellValue(sourceCell, targetCell);
+            sheet.CopyCellValue(sourceCell, targetCell);
 
             // Copy cell style
             targetCell.CellStyle = sourceCell.CellStyle;
@@ -164,7 +164,7 @@ public static class SheetExtensions
                     {
                         var newCell = row.GetCell(j - 1) ?? row.CreateCell(j - 1);
                         // Copy cell value and style
-                        CopyCellValue(cellToMove, newCell);
+                        sheet.CopyCellValue(cellToMove, newCell);
                         newCell.CellStyle = cellToMove.CellStyle;
                         row.RemoveCell(cellToMove);
                     }
@@ -214,7 +214,7 @@ public static class SheetExtensions
     /// <summary>
     /// Helper method để copy giá trị từ source cell sang target cell
     /// </summary>
-    private static void CopyCellValue(ICell sourceCell, ICell targetCell)
+    public static void CopyCellValue(this ISheet sheet, ICell sourceCell, ICell targetCell)
     {
         switch (sourceCell.CellType)
         {

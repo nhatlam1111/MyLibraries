@@ -231,4 +231,26 @@ public class MergeManager
             }
         }
     }
+
+    /// <summary>
+    /// Khôi phục merge regions với offset cho row và column
+    /// </summary>
+    public void RestoreMergeRegions(List<MergeRegion> mergeRegions, int rowOffset = 0, int colOffset = 0)
+    {
+        foreach (var mergeRegion in mergeRegions)
+        {
+            try
+            {
+                MergeCells(
+                    mergeRegion.FirstRow + rowOffset, 
+                    mergeRegion.LastRow + rowOffset,
+                    mergeRegion.FirstColumn + colOffset, 
+                    mergeRegion.LastColumn + colOffset);
+            }
+            catch (ArgumentException)
+            {
+                // Merge region already exists or invalid, ignore
+            }
+        }
+    }
 }

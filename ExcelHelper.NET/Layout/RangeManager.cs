@@ -11,10 +11,12 @@ namespace ExcelHelper.NET.Layout;
 public class RangeManager
 {
     private readonly ISheet _sheet;
+    private readonly MergeManager _mergeManager;
 
     public RangeManager(ISheet sheet)
     {
         _sheet = sheet;
+        _mergeManager = new MergeManager(sheet);
     }
 
     /// <summary>
@@ -34,41 +36,94 @@ public class RangeManager
     }
 
     /// <summary>
+    /// Copy một vùng đến vị trí mới với chỉ định cột
+    /// </summary>
+    public void CopyRange(string sourceRange, int targetStartRow, int targetStartCol)
+    {
+        var cells = sourceRange.Split(':');
+        if (cells.Length != 2) return;
+
+        var startCell = _sheet.GetCellByAddress(cells[0]);
+        var endCell = _sheet.GetCellByAddress(cells[1]);
+        
+        if (startCell == null || endCell == null) return;
+
+        CopyRange(startCell, endCell, targetStartRow, targetStartCol);
+    }
+
+    /// <summary>
     /// Copy một vùng từ start cell đến end cell
     /// </summary>
     public void CopyRange(ICell startCell, ICell endCell, int targetStartRow)
     {
+        CopyRange(startCell, endCell, targetStartRow, startCell.ColumnIndex);
+    }
+
+    /// <summary>
+    /// Copy một vùng từ start cell đến end cell với chỉ định vị trí đích
+    /// </summary>
+    public void CopyRange(ICell startCell, ICell endCell, int targetStartRow, int targetStartCol)
+    {
         var rowCount = endCell.RowIndex - startCell.RowIndex + 1;
+        var colCount = endCell.ColumnIndex - startCell.ColumnIndex + 1;
         
-        for (int i = 0; i < rowCount; i++)
+        for (int r = 0; r < rowCount; r++)
         {
-            _sheet.CloneRow(startCell.RowIndex + i, targetStartRow + i);
+            var sourceRow = _sheet.GetRow(startCell.RowIndex + r);
+            if (sourceRow == null) continue;
+            
+            var targetRow = _sheet.GetRow(targetStartRow + r) ?? _sheet.CreateRow(targetStartRow + r);
+            
+            for (int c = 0; c < colCount; c++)
+            {
+                var sourceCell = sourceRow.GetCell(startCell.ColumnIndex + c);
+                var targetCell = targetRow.GetCell(targetStartCol + c) ?? targetRow.CreateCell(targetStartCol + c);
+                
+                if (sourceCell != null)
+                {
+                    // Sử dụng helper method để copy giá trị cell
+                    _sheet.CopyCellValue(sourceCell, targetCell);
+                    targetCell.CellStyle = sourceCell.CellStyle;
+                }
+            }
         }
     }
 
     /// <summary>
     /// Copy một vùng từ start cell đến end cell với xử lý merge regions
     /// </summary>
-    public void CopyRangeWithMerge(ICell startCell, ICell endCell, int targetStartRow, List<CellRangeAddress> sourceMergeRegions)
+    public void CopyRangeWithMerge(ICell startCell, ICell endCell, int targetStartRow)
     {
-        var rowCount = endCell.RowIndex - startCell.RowIndex + 1;
-        var sourceStartRow = startCell.RowIndex;
-        
-        // Copy từng row
-        for (int i = 0; i < rowCount; i++)
-        {
-            _sheet.CloneRow(sourceStartRow + i, targetStartRow + i);
-        }
+        CopyRangeWithMerge(startCell, endCell, targetStartRow, startCell.ColumnIndex);
+    }
 
-        // Copy merge regions
+    /// <summary>
+    /// Copy một vùng từ start cell đến end cell với xử lý merge regions và chỉ định cột đích
+    /// </summary>
+    public void CopyRangeWithMerge(ICell startCell, ICell endCell, int targetStartRow, int targetStartCol)
+    {
+        var sourceStartRow = startCell.RowIndex;
+        var sourceEndRow = endCell.RowIndex;
+        var sourceStartCol = startCell.ColumnIndex;
+        var sourceEndCol = endCell.ColumnIndex;
+        
+        // Copy cells với vị trí mới
+        CopyRange(startCell, endCell, targetStartRow, targetStartCol);
+
+        // Lấy merge regions trong source range và copy với offset
+        var sourceMergeRegions = _mergeManager.GetMergeRegionsInRange(
+            sourceStartRow, sourceEndRow, sourceStartCol, sourceEndCol);
+
         foreach (var sourceRegion in sourceMergeRegions)
         {
             var rowOffset = targetStartRow - sourceStartRow;
+            var colOffset = targetStartCol - sourceStartCol;
+            
             var newRegion = new CellRangeAddress(
                 sourceRegion.FirstRow + rowOffset,
                 sourceRegion.LastRow + rowOffset,
-                sourceRegion.FirstColumn,
-                sourceRegion.LastColumn);
+                sourceRegion.FirstColumn + colOffset,
+                sourceRegion.LastColumn + colOffset);
 
             try
             {
@@ -79,6 +134,38 @@ public class RangeManager
                 // Region already exists or invalid, ignore
             }
         }
+    }
+
+    /// <summary>
+    /// Copy một vùng đến vị trí mới với xử lý merge regions
+    /// </summary>
+    public void CopyRangeWithMerge(string sourceRange, int targetStartRow)
+    {
+        var cells = sourceRange.Split(':');
+        if (cells.Length != 2) return;
+
+        var startCell = _sheet.GetCellByAddress(cells[0]);
+        var endCell = _sheet.GetCellByAddress(cells[1]);
+        
+        if (startCell == null || endCell == null) return;
+
+        CopyRangeWithMerge(startCell, endCell, targetStartRow);
+    }
+
+    /// <summary>
+    /// Copy một vùng đến vị trí mới với xử lý merge regions và chỉ định cột
+    /// </summary>
+    public void CopyRangeWithMerge(string sourceRange, int targetStartRow, int targetStartCol)
+    {
+        var cells = sourceRange.Split(':');
+        if (cells.Length != 2) return;
+
+        var startCell = _sheet.GetCellByAddress(cells[0]);
+        var endCell = _sheet.GetCellByAddress(cells[1]);
+        
+        if (startCell == null || endCell == null) return;
+
+        CopyRangeWithMerge(startCell, endCell, targetStartRow, targetStartCol);
     }
 
     /// <summary>

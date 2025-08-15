@@ -114,7 +114,7 @@ public class SheetManager
             // Khôi phục merge regions cho dòng hiện tại nếu template có merge
             if (templateMergeRegions.Any()) 
             {
-                RestoreMergeRegions(templateMergeRegions, i);
+                _mergeManager.RestoreMergeRegions(templateMergeRegions, i);
             }
 
             if (options.AutofitHeight)
@@ -124,30 +124,8 @@ public class SheetManager
         }
 
         // Khôi phục merge regions đoạn trước template và sau template
-        RestoreMergeRegions(beforeTemplateMergeRegions, 0); // Không shift
-        RestoreMergeRegions(afterTemplateMergeRegions, rowsNeeded - 1); // Shift theo số rows inserted
-    }
-
-    /// <summary>
-    /// Khôi phục merge regions với offset
-    /// </summary>
-    private void RestoreMergeRegions(List<MergeRegion> mergeRegions, int rowOffset)
-    {
-        foreach (var mergeRegion in mergeRegions)
-        {
-            try
-            {
-                _mergeManager.MergeCells(
-                    mergeRegion.FirstRow + rowOffset, 
-                    mergeRegion.LastRow + rowOffset,
-                    mergeRegion.FirstColumn, 
-                    mergeRegion.LastColumn);
-            }
-            catch (ArgumentException)
-            {
-                // Merge region already exists or invalid, ignore
-            }
-        }
+        _mergeManager.RestoreMergeRegions(beforeTemplateMergeRegions, 0); // Không shift
+        _mergeManager.RestoreMergeRegions(afterTemplateMergeRegions, rowsNeeded - 1); // Shift theo số rows inserted
     }
 
     /// <summary>
@@ -230,12 +208,12 @@ public class SheetManager
             if (templateMergeRegions.Any())
             {
                 var rowOffset = i * rangeRowCount;
-                RestoreMergeRegions(templateMergeRegions, rowOffset);
+                _mergeManager.RestoreMergeRegions(templateMergeRegions, rowOffset);
             }
         }
         
         // Khôi phục merge regions khác
-        RestoreMergeRegions(otherMergeRegions, 0);
+        _mergeManager.RestoreMergeRegions(otherMergeRegions, 0);
     }
 
     /// <summary>
