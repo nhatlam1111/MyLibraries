@@ -1,5 +1,3 @@
-using NPOI.SS.UserModel;
-using NPOI.XSSF.UserModel;
 using System.Data;
 using System.Text.RegularExpressions;
 using ExcelHelper.NET.Data;
@@ -71,24 +69,39 @@ public class SheetManager
     /// </summary>
     public void InsertData<T>(IEnumerable<T> data, int startRow, 
                              IExcelDataProvider<T>? dataProvider = null,
-                             InsertOptions? options = null)
+                             InsertOptions? options = null, bool moveExistingRows = true)
     {
         var dataList = data.ToList();
         if (!dataList.Any()) return;
 
+        var rowsNeeded = dataList.Count;
         dataProvider ??= new GenericDataProvider<T>();
         options ??= new InsertOptions();
-
-        var rowsNeeded = dataList.Count;
         
-        // Tạo đủ số dòng cần thiết
-        _rowManager.CreateRows(startRow, rowsNeeded);
-
         // Lấy thông tin các cột từ header row
         var headerRow = _sheet.GetRow(startRow);
         if (headerRow == null) return;
 
         var columnMappings = GetColumnMappings(headerRow, dataProvider);
+
+        var templateMergeRegions = new List<MergeRegion>();
+        var beforeTemplateMergeRegions = new List<MergeRegion>();
+        var afterTemplateMergeRegions = new List<MergeRegion>();
+
+        //lưu lai merge list hiện tại xử lý sau và xóa toàn bộ merge regions hiện tại để tối ưu hóa tốc độ
+        List<MergeRegion> mergeRegions = _mergeManager.GetAllMergeRegions();
+        _mergeManager.ClearAllMergeRegions();
+
+        // Tìm merge regions
+        foreach (var mr in mergeRegions)
+        {
+            if (mr.FirstRow == startRow) templateMergeRegions.Add(mr);
+            else if (mr.FirstRow < startRow) beforeTemplateMergeRegions.Add(mr);
+            else afterTemplateMergeRegions.Add(mr);
+        }
+
+        // Tạo đủ số dòng cần thiết
+        _rowManager.CreateRows(startRow, rowsNeeded, moveExistingRows);
 
         // Điền dữ liệu
         var sequenceNumber = options.SequenceStartNumber;
@@ -98,9 +111,41 @@ public class SheetManager
             FillRowData(dataList[i], rowIndex, columnMappings, dataProvider, 
                        options.InsertSequence ? sequenceNumber++ : null);
 
+            // Khôi phục merge regions cho dòng hiện tại nếu template có merge
+            if (templateMergeRegions.Any()) 
+            {
+                RestoreMergeRegions(templateMergeRegions, i);
+            }
+
             if (options.AutofitHeight)
             {
                 _rowManager.AutoFitRowHeight(rowIndex);
+            }
+        }
+
+        // Khôi phục merge regions đoạn trước template và sau template
+        RestoreMergeRegions(beforeTemplateMergeRegions, 0); // Không shift
+        RestoreMergeRegions(afterTemplateMergeRegions, rowsNeeded - 1); // Shift theo số rows inserted
+    }
+
+    /// <summary>
+    /// Khôi phục merge regions với offset
+    /// </summary>
+    private void RestoreMergeRegions(List<MergeRegion> mergeRegions, int rowOffset)
+    {
+        foreach (var mergeRegion in mergeRegions)
+        {
+            try
+            {
+                _mergeManager.MergeCells(
+                    mergeRegion.FirstRow + rowOffset, 
+                    mergeRegion.LastRow + rowOffset,
+                    mergeRegion.FirstColumn, 
+                    mergeRegion.LastColumn);
+            }
+            catch (ArgumentException)
+            {
+                // Merge region already exists or invalid, ignore
             }
         }
     }
@@ -108,12 +153,12 @@ public class SheetManager
     /// <summary>
     /// Chèn dữ liệu từ DataTable (sử dụng adapter)
     /// </summary>
-    public void InsertData<T>(DataTable dataTable, int startRow, InsertOptions? options = null) 
+    public void InsertData<T>(DataTable dataTable, int startRow, InsertOptions? options = null, bool moveExistingRows = true) 
         where T : new()
     {
         var data = DataTableAdapter.ToList<T>(dataTable);
         var dataProvider = new GenericDataProvider<T>();
-        InsertData(data, startRow, dataProvider, options);
+        InsertData(data, startRow, dataProvider, options, moveExistingRows);
     }
 
     /// <summary>
@@ -185,7 +230,7 @@ public class SheetManager
 
             var cellValue = cell.GetStringValue().Trim().ToLower();
             
-            // Tìm field name match với cell value
+            // Ưu tiên map field từ T trước
             var matchingField = fieldNames.FirstOrDefault(f => 
                 f.Equals(cellValue, StringComparison.OrdinalIgnoreCase));
                 
@@ -193,9 +238,23 @@ public class SheetManager
             {
                 mappings[i] = matchingField;
             }
+            // Nếu không có trong T, check xem có phải sequence field không
+            else if (IsSequenceField(cellValue))
+            {
+                mappings[i] = cellValue; // Map trực tiếp để xử lý sequence
+            }
         }
 
         return mappings;
+    }
+
+    /// <summary>
+    /// Kiểm tra field có phải sequence field (STT, NO) không
+    /// </summary>
+    private static bool IsSequenceField(string fieldName)
+    {
+        return fieldName.Equals("no", StringComparison.OrdinalIgnoreCase) ||
+               fieldName.Equals("stt", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -212,15 +271,14 @@ public class SheetManager
             var cell = row.GetCell(columnIndex);
             if (cell == null) continue;
 
-            // Xử lý sequence number
-            if (sequenceNumber.HasValue && 
-                (fieldName.Equals("no", StringComparison.OrdinalIgnoreCase) ||
-                 fieldName.Equals("stt", StringComparison.OrdinalIgnoreCase)))
+            // Xử lý sequence number (ưu tiên sequence trước khi lấy field value từ T)
+            if (sequenceNumber.HasValue && IsSequenceField(fieldName))
             {
                 cell.SetValue(sequenceNumber.Value);
                 continue;
             }
 
+            // Nếu không phải sequence field, lấy field value từ T
             var fieldValue = dataProvider.GetFieldValue(item, fieldName);
             
             // Xử lý hình ảnh
@@ -338,19 +396,4 @@ public class SheetManager
         _rangeManager.CopyRangeWithMerge(startCell, endCell, targetStartRow, sourceMergeRegions);
     }
 
-    /// <summary>
-    /// Tạo nhiều rows từ template với hỗ trợ merge cells
-    /// </summary>
-    public void CreateRowsWithMerge(int templateRowIndex, int count, bool moveExistingRows = true)
-    {
-        _rowManager.CreateRowsWithMerge(templateRowIndex, count, moveExistingRows);
-    }
-
-    /// <summary>
-    /// Move row với hỗ trợ merge cells
-    /// </summary>
-    public void MoveRowWithMerge(int sourceRowIndex, int targetRowIndex)
-    {
-        _rowManager.MoveRowWithMerge(sourceRowIndex, targetRowIndex);
-    }
 }

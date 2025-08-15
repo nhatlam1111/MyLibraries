@@ -29,7 +29,7 @@ public record CellFormat(
 /// </summary>
 public record InsertOptions(
     bool AutofitHeight = false,
-    bool InsertSequence = false,
+    bool InsertSequence = true,
     int SequenceStartNumber = 1
 );
 

@@ -13,6 +13,8 @@ public static class SheetExtensions
     /// <summary>
     /// Lấy cell theo địa chỉ Excel (A1, B5, ...)
     /// </summary>
+    /// 
+
     public static ICell? GetCellByAddress(this ISheet sheet, string address)
     {
         try
@@ -47,9 +49,24 @@ public static class SheetExtensions
         {
             // Di chuyển các dòng hiện có xuống dưới
             var rowsToMove = sheet.LastRowNum - templateRowIndex;
+            var newCellStyle = sheet.Workbook.CreateCellStyle();
+
             for (int i = rowsToMove; i >= 1; i--)
             {
                 sheet.MoveRow(templateRowIndex + i, templateRowIndex + i + count - 1);
+
+                var sourceRow = sheet.GetRow(templateRowIndex + i);
+                if (sourceRow != null)
+                {
+                    for (int idx = 0; idx < sourceRow.LastCellNum; idx++)
+                    {
+                        var cell = sourceRow.GetCell(idx);
+                        if (cell == null) continue;
+
+                        cell.SetCellValue("");
+                        cell.CellStyle = newCellStyle;
+                    }
+                }
             }
         }
 
@@ -82,35 +99,12 @@ public static class SheetExtensions
 
             var targetCell = targetRow.GetCell(i) ?? targetRow.CreateCell(i);
             
-            // Copy cell value and type
-            switch (sourceCell.CellType)
-            {
-                case CellType.String:
-                    targetCell.SetCellValue(sourceCell.StringCellValue);
-                    break;
-                case CellType.Numeric:
-                    targetCell.SetCellValue(sourceCell.NumericCellValue);
-                    break;
-                case CellType.Boolean:
-                    targetCell.SetCellValue(sourceCell.BooleanCellValue);
-                    break;
-                case CellType.Formula:
-                    targetCell.SetCellFormula(sourceCell.CellFormula);
-                    break;
-                case CellType.Error:
-                    targetCell.SetCellErrorValue(sourceCell.ErrorCellValue);
-                    break;
-                default:
-                    targetCell.SetBlank();
-                    break;
-            }
+            // Copy cell value and style
+            CopyCellValue(sourceCell, targetCell);
 
             // Copy cell style
             targetCell.CellStyle = sourceCell.CellStyle;
         }
-
-        // Copy merged regions
-        CopyMergedRegionsForRow(sheet, sourceRowIndex, targetRowIndex);
     }
 
     /// <summary>
@@ -128,34 +122,6 @@ public static class SheetExtensions
             {
                 var cell = sourceRow.GetCell(i);
                 cell?.SetBlank();
-            }
-        }
-    }
-
-    /// <summary>
-    /// Copy merged regions cho một dòng cụ thể
-    /// </summary>
-    private static void CopyMergedRegionsForRow(ISheet sheet, int sourceRowIndex, int targetRowIndex)
-    {
-        for (int i = 0; i < sheet.NumMergedRegions; i++)
-        {
-            var region = sheet.GetMergedRegion(i);
-            if (region.FirstRow == sourceRowIndex && region.LastRow == sourceRowIndex)
-            {
-                var newRegion = new CellRangeAddress(
-                    targetRowIndex,
-                    targetRowIndex, 
-                    region.FirstColumn,
-                    region.LastColumn);
-                
-                try
-                {
-                    sheet.AddMergedRegion(newRegion);
-                }
-                catch
-                {
-                    // Ignore merge conflicts
-                }
             }
         }
     }
@@ -198,24 +164,7 @@ public static class SheetExtensions
                     {
                         var newCell = row.GetCell(j - 1) ?? row.CreateCell(j - 1);
                         // Copy cell value and style
-                        switch (cellToMove.CellType)
-                        {
-                            case CellType.String:
-                                newCell.SetCellValue(cellToMove.StringCellValue);
-                                break;
-                            case CellType.Numeric:
-                                newCell.SetCellValue(cellToMove.NumericCellValue);
-                                break;
-                            case CellType.Boolean:
-                                newCell.SetCellValue(cellToMove.BooleanCellValue);
-                                break;
-                            case CellType.Formula:
-                                newCell.SetCellFormula(cellToMove.CellFormula);
-                                break;
-                            default:
-                                newCell.SetBlank();
-                                break;
-                        }
+                        CopyCellValue(cellToMove, newCell);
                         newCell.CellStyle = cellToMove.CellStyle;
                         row.RemoveCell(cellToMove);
                     }
@@ -259,6 +208,34 @@ public static class SheetExtensions
                     // Ignore merge conflicts
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Helper method để copy giá trị từ source cell sang target cell
+    /// </summary>
+    private static void CopyCellValue(ICell sourceCell, ICell targetCell)
+    {
+        switch (sourceCell.CellType)
+        {
+            case CellType.String:
+                targetCell.SetCellValue(sourceCell.StringCellValue);
+                break;
+            case CellType.Numeric:
+                targetCell.SetCellValue(sourceCell.NumericCellValue);
+                break;
+            case CellType.Boolean:
+                targetCell.SetCellValue(sourceCell.BooleanCellValue);
+                break;
+            case CellType.Formula:
+                targetCell.SetCellFormula(sourceCell.CellFormula);
+                break;
+            case CellType.Error:
+                targetCell.SetCellErrorValue(sourceCell.ErrorCellValue);
+                break;
+            default:
+                targetCell.SetBlank();
+                break;
         }
     }
 }

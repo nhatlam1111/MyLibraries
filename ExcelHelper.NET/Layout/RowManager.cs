@@ -26,43 +26,6 @@ public class RowManager
         _sheet.CreateRowsFromTemplate(templateRowIndex, count, moveExistingRows);
     }
 
-    /// <summary>
-    /// Tạo nhiều dòng từ template với xử lý merge cells
-    /// </summary>
-    public void CreateRowsWithMerge(int templateRowIndex, int count, bool moveExistingRows = true)
-    {
-        if (count <= 1) return;
-
-        var rowsToInsert = count - 1; // Trừ 1 vì đã có template row
-        var rowsToMove = _sheet.LastRowNum - templateRowIndex;
-
-        // Thu thập merge regions của template row
-        var templateMergeRegions = new List<CellRangeAddress>();
-        for (int i = 0; i < _sheet.NumMergedRegions; i++)
-        {
-            var region = _sheet.GetMergedRegion(i);
-            if (region.FirstRow <= templateRowIndex && templateRowIndex <= region.LastRow)
-            {
-                templateMergeRegions.Add(region);
-            }
-        }
-
-        // Di chuyển các dòng hiện có xuống dưới nếu cần
-        if (moveExistingRows && rowsToMove > 0)
-        {
-            for (int i = rowsToMove; i >= 1; i--)
-            {
-                _sheet.MoveRow(templateRowIndex + i, templateRowIndex + i + rowsToInsert);
-            }
-        }
-
-        // Tạo các dòng mới từ template
-        for (int i = 0; i < rowsToInsert; i++)
-        {
-            var newRowIndex = templateRowIndex + i + 1;
-            CloneRowWithMerge(templateRowIndex, newRowIndex);
-        }
-    }
 
     /// <summary>
     /// Clone một dòng
@@ -72,43 +35,6 @@ public class RowManager
         _sheet.CloneRow(sourceRowIndex, targetRowIndex);
     }
 
-    /// <summary>
-    /// Clone một dòng với xử lý merge cells
-    /// </summary>
-    public void CloneRowWithMerge(int sourceRowIndex, int targetRowIndex)
-    {
-        // Clone row data
-        _sheet.CloneRow(sourceRowIndex, targetRowIndex);
-
-        // Handle merge regions for this row
-        for (int i = 0; i < _sheet.NumMergedRegions; i++)
-        {
-            var region = _sheet.GetMergedRegion(i);
-            
-            // Kiểm tra nếu merge region chứa source row
-            if (region.FirstRow <= sourceRowIndex && sourceRowIndex <= region.LastRow)
-            {
-                // Tính toán offset cho target row
-                var rowOffset = targetRowIndex - sourceRowIndex;
-                
-                // Tạo merge region mới cho target row
-                var newRegion = new CellRangeAddress(
-                    region.FirstRow + rowOffset,
-                    region.LastRow + rowOffset,
-                    region.FirstColumn,
-                    region.LastColumn);
-
-                try
-                {
-                    _sheet.AddMergedRegion(newRegion);
-                }
-                catch (ArgumentException)
-                {
-                    // Region already exists or invalid, ignore
-                }
-            }
-        }
-    }
 
     /// <summary>
     /// Di chuyển một dòng
@@ -118,50 +44,6 @@ public class RowManager
         _sheet.MoveRow(sourceRowIndex, targetRowIndex);
     }
 
-    /// <summary>
-    /// Di chuyển một dòng với xử lý merge cells
-    /// </summary>
-    public void MoveRowWithMerge(int sourceRowIndex, int targetRowIndex)
-    {
-        // Thu thập merge regions liên quan đến source row
-        var affectedRegions = new List<(int index, CellRangeAddress region)>();
-        for (int i = 0; i < _sheet.NumMergedRegions; i++)
-        {
-            var region = _sheet.GetMergedRegion(i);
-            if (region.FirstRow <= sourceRowIndex && sourceRowIndex <= region.LastRow)
-            {
-                affectedRegions.Add((i, region));
-            }
-        }
-
-        // Di chuyển row
-        _sheet.MoveRow(sourceRowIndex, targetRowIndex);
-
-        // Cập nhật merge regions
-        foreach (var (index, region) in affectedRegions.OrderByDescending(x => x.index))
-        {
-            // Xóa region cũ
-            _sheet.RemoveMergedRegion(index);
-
-            // Tính toán vị trí mới
-            var rowOffset = targetRowIndex - sourceRowIndex;
-            var newRegion = new CellRangeAddress(
-                region.FirstRow + rowOffset,
-                region.LastRow + rowOffset,
-                region.FirstColumn,
-                region.LastColumn);
-
-            // Thêm region mới
-            try
-            {
-                _sheet.AddMergedRegion(newRegion);
-            }
-            catch (ArgumentException)
-            {
-                // Region invalid, ignore
-            }
-        }
-    }
 
     /// <summary>
     /// Xóa một dòng
