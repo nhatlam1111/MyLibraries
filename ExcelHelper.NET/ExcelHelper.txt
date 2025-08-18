@@ -2244,4 +2244,89 @@ namespace ReportTools.Classes
             return (int)pixels;
         }
     }
+
+    public class EXOptions
+    {
+        //sheet option
+        public List<EXSheet> sheets;
+
+        //more options
+
+        public EXOptions()
+        {
+            sheets = new List<EXSheet>();
+        }
+    }
+
+    public class EXSheet
+    {
+        public int SheetIndex;
+        public string SheetName;
+        public List<EXMerge> merges;
+        public EXMerge GrandTotal;
+
+        public EXSheet()
+        {
+            SheetIndex = 0;
+            SheetName = "Sheet0";
+            merges = new List<EXMerge>();
+            GrandTotal = new EXMerge();
+        }
+    }
+
+    public class EXMerge
+    {
+        public string ColumnName;
+        public int ColumnIndex;
+        public bool isTotal;
+        public bool isTotalTop;
+        public bool isHaveRowTotal;
+        public SubTotalType SubTotalType;
+        public IFont SubTotalFont;
+        public Color CellColor;
+        public int MergeColumnFrom;
+        public int MergeColumnTo;
+        public string TotalText;
+        public TotalTextType TotalTextType;
+
+        public List<EXColumn> ColumnMergeOptions;
+
+        public EXMerge()
+        {
+            isTotal = false;
+            isTotalTop = false;
+            isHaveRowTotal = false;
+            ColumnName = "";
+            SubTotalFont = null;
+            CellColor = Color.Transparent;
+            TotalTextType = TotalTextType.Default;
+
+            ColumnMergeOptions = new List<EXColumn>();
+        }
+    }
+
+    public class EXColumn
+    {
+        public string ColumnName;
+        public int ColumnIndex;
+        public SubTotalType SubTotalType;
+        public ICellStyle CellStyle;
+    }
+
+    public enum SubTotalType
+    {
+        NoValue,
+        Count,
+        SumValue,
+        Average
+    }
+
+    public enum TotalTextType
+    {
+        NoValue,
+        Default,
+        GroupValue,
+        GroupValueAndCount,
+        Input
+    }
 }

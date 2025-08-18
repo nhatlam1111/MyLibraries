@@ -1,0 +1,2343 @@
+"use strict";
+
+const AES = use("AES");
+const Env = use("Env");
+const Helpers = use("Helpers");
+const fs = use("fs");
+const Utils = use("Utils");
+const DB_CONNECTION = Env.get("DB_CONNECTION");
+const ROOT_DIR_FILES = Env.get("ROOT_DIR_FILES");
+const APP_KEY = Env.get("APP_KEY");
+const APP_URL_LOCAL = Env.get("APP_URL_LOCAL", Env.get("APP_URL"));
+const DBService = use("DBService");
+const oracledb = require("oracledb");
+
+var Word = use('docx-templates');
+var Excel = use('exceljs');
+var moment = require('moment');
+
+//const user = await auth.getUser();
+
+
+class ReportHelper {
+
+    reportType = null;
+    convert = null;
+    isDebugger = null;
+    logIdx = 0;
+    
+    regexCell = /([a-zA-Z]+)(\d+)/;
+    regexColumns = /\$[\[](.*?)[\]]/g; // list  $[column]
+    regexColumnName = /\$[\[](.*?)[\]]/; //  $[column]
+    workbook = new Excel.Workbook();
+    worksheet = null;
+    templateFile = "";
+    reportPath ="";
+    returnFile = null;
+    fileName = "";
+    extension = "";
+
+    dateColumns = [];
+    stringColumns = [];
+    imageColumns = [];
+    imagePathColumns = [];
+    qrColumns = [];
+    sumColumns = [];
+
+    rowIdx = 0;//su dung do insert total
+    mergeColIndex = [];
+    sequenceType = null;
+    rowSequence = 0// cho so thu tu
+    totalIdxs = [];
+    subStyle=null;
+    totalStyle = null;
+    pageBreak = false;
+    dataPerPage = 1;
+
+
+
+
+
+    //vng-207 
+    //20210501: add report word - doc-template
+    docTemplate = null;
+    docBuffer = null;
+    wordData = {
+        word: []
+    };
+
+    excelCols = [
+        "",   "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+        "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ",
+        "BA", "BB", "BC", "BD", "BE", "BF", "BG", "BH", "BI", "BJ", "BK", "BL", "BM", "BN", "BO", "BP", "BQ", "BR", "BS", "BT", "BU", "BV", "BW", "BX", "BY", "BZ",
+        "CA", "CB", "CC", "CD", "CE", "CF", "CG", "CH", "CI", "CJ", "CK", "CL", "CM", "CN", "CO", "CP", "CQ", "CR", "CS", "CT", "CU", "CV", "CW", "CX", "CY", "CZ",
+        "DA", "DB", "DC", "DD", "DE", "DF", "DG", "DH", "DI", "DJ", "DK", "DL", "DM", "DN", "DO", "DP", "DQ", "DR", "DS", "DT", "DU", "DV", "DW", "DX", "DY", "DZ",
+        "EA", "EB", "EC", "ED", "EE", "EF", "EG", "EH", "EI", "EJ", "EK", "EL", "EM", "EN", "EO", "EP", "EQ", "ER", "ES", "ET", "EU", "EV", "EW", "EX", "EY", "EZ",
+        "FA", "FB", "FC", "FD", "FE", "FF", "FG", "FH", "FI", "FJ", "FK", "FL", "FM", "FN", "FO", "FP", "FQ", "FR", "FS", "FT", "FU", "FV", "FW", "FX", "FY", "FZ",
+        "GA", "GB", "GC", "GD", "GE", "GF", "GG", "GH", "GI", "GJ", "GK", "GL", "GM", "GN", "GO", "GP", "GQ", "GR", "GS", "GT", "GU", "GV", "GW", "GX", "GY", "GZ",
+        "HA", "HB", "HC", "HD", "HE", "HF", "HG", "HH", "HI", "HJ", "HK", "HL", "HM", "HN", "HO", "HP", "HQ", "HR", "HS", "HT", "HU", "HV", "HW", "HX", "HY", "HZ",
+        "IA", "IB", "IC", "ID", "IE", "IF", "IG", "IH", "II", "IJ", "IK", "IL", "IM", "IN", "IO", "IP", "IQ", "IR", "IS", "IT", "IU", "IV", "IW", "IX", "IY", "IZ",
+        "JA", "JB", "JC", "JD", "JE", "JF", "JG", "JH", "JI", "JJ", "JK", "JL", "JM", "JN", "JO", "JP", "JQ", "JR", "JS", "JT", "JU", "JV", "JW", "JX", "JY", "JZ",
+        "KA", "KB", "KC", "KD", "KE", "KF", "KG", "KH", "KI", "KJ", "KK", "KL", "KM", "KN", "KO", "KP", "KQ", "KR", "KS", "KT", "KU", "KV", "KW", "KX", "KY", "KZ",
+        "LA", "LB", "LC", "LD", "LE", "LF", "LG", "LH", "LI", "LJ", "LK", "LL", "LM", "LN", "LO", "LP", "LQ", "LR", "LS", "LT", "LU", "LV", "LW", "LX", "LY", "LZ",
+        "MA", "MB", "MC", "MD", "ME", "MF", "MG", "MH", "MI", "MJ", "MK", "ML", "MM", "MN", "MO", "MP", "MQ", "MR", "MS", "MT", "MU", "MV", "MW", "MX", "MY", "MZ",
+        "NA", "NB", "NC", "ND", "NE", "NF", "NG", "NH", "NI", "NJ", "NK", "NL", "NM", "NN", "NO", "NP", "NQ", "NR", "NS", "NT", "NU", "NV", "NW", "NX", "NY", "NZ",
+        "OA", "OB", "OC", "OD", "OE", "OF", "OG", "OH", "OI", "OJ", "OK", "OL", "OM", "ON", "OO", "OP", "OQ", "OR", "OS", "OT", "OU", "OV", "OW", "OX", "OY", "OZ",
+        "PA", "PB", "PC", "PD", "PE", "PF", "PG", "PH", "PI", "PJ", "PK", "PL", "PM", "PN", "PO", "PP", "PQ", "PR", "PS", "PT", "PU", "PV", "PW", "PX", "PY", "PZ",
+        "QA", "QB", "QC", "QD", "QE", "QF", "QG", "QH", "QI", "QJ", "QK", "QL", "QM", "QN", "QO", "QP", "QQ", "QR", "QS", "QT", "QU", "QV", "QW", "QX", "QY", "QZ",
+        "RA", "RB", "RC", "RD", "RE", "RF", "RG", "RH", "RI", "RJ", "RK", "RL", "RM", "RN", "RO", "RP", "RQ", "RR", "RS", "RT", "RU", "RV", "RW", "RX", "RY", "RZ",
+        "SA", "SB", "SC", "SD", "SE", "SF", "SG", "SH", "SI", "SJ", "SK", "SL", "SM", "SN", "SO", "SP", "SQ", "SR", "SS", "ST", "SU", "SV", "SW", "SX", "SY", "SZ",
+        "TA", "TB", "TC", "TD", "TE", "TF", "TG", "TH", "TI", "TJ", "TK", "TL", "TM", "TN", "TO", "TP", "TQ", "TR", "TS", "TT", "TU", "TV", "TW", "TX", "TY", "TZ",
+        "UA", "UB", "UC", "UD", "UE", "UF", "UG", "UH", "UI", "UJ", "UK", "UL", "UM", "UN", "UO", "UP", "UQ", "UR", "US", "UT", "UU", "UV", "UW", "UX", "UY", "UZ",
+        "VA", "VB", "VC", "VD", "VE", "VF", "VG", "VH", "VI", "VJ", "VK", "VL", "VM", "VN", "VO", "VP", "VQ", "VR", "VS", "VT", "VU", "VV", "VW", "VX", "VY", "VZ",
+        "WA", "WB", "WC", "WD", "WE", "WF", "WG", "WH", "WI", "WJ", "WK", "WL", "WM", "WN", "WO", "WP", "WQ", "WR", "WS", "WT", "WU", "WV", "WW", "WX", "WY", "WZ",
+        "XA", "XB", "XC", "XD", "XE", "XF", "XG", "XH", "XI", "XJ", "XK", "XL", "XM", "XN", "XO", "XP", "XQ", "XR", "XS", "XT", "XU", "XV", "XW", "XX", "XY", "XZ",
+        "YA", "YB", "YC", "YD", "YE", "YF", "YG", "YH", "YI", "YJ", "YK", "YL", "YM", "YN", "YO", "YP", "YQ", "YR", "YS", "YT", "YU", "YV", "YW", "YX", "YY", "YZ",
+        "ZA", "ZB", "ZC", "ZD", "ZE", "ZF", "ZG", "ZH", "ZI", "ZJ", "ZK", "ZL", "ZM", "ZN", "ZO", "ZP", "ZQ", "ZR", "ZS", "ZT", "ZU", "ZV", "ZW", "ZX", "ZY", "ZZ",
+    ]
+
+
+	constructor(fileTemplate, lang, crt_by, reportType = 'excel', convert = null, debug = false) {
+        if(fileTemplate == null || fileTemplate == undefined) {
+
+        } else {
+            this.reportType = reportType;
+            this.convert = convert;
+            this.isDebugger = debug;
+            this.extension = ".xlsx";
+            if(this.reportType === "word") {
+                this.extension = ".docx"
+            }
+
+            this.fileName = (fileTemplate.split("/").pop())
+                            .replace(".xlsx","").replace(".xls","")
+                            .replace(".docx","").replace(".doc","")
+                            ;
+            this.templateFile = Helpers.resourcesPath(fileTemplate);
+            this.reportPath = this.fileName + "_" + crt_by + this.extension;
+            this.returnFile = Helpers.tmpPath(this.reportPath)
+        }
+        
+    }
+
+    async new( _fileName, _tempBuffer, crt_by, _reportType, convert = null ){
+        this.extension = `.${_reportType}`;
+        this.reportType = _reportType == 'xlsx' ? 'excel' : ( _reportType == 'docx' ? 'word' : _reportType);
+        this.fileName = (_fileName.split("/").pop())
+                        .replace(".xlsx","").replace(".xls","")
+                        .replace(".docx","").replace(".doc","")
+                        ;
+        
+        this.reportPath = this.fileName + "_" + crt_by + this.extension;
+        this.returnFile = Helpers.tmpPath(this.reportPath)
+
+        this.templateFile = this.fileName + "_tmp_" + crt_by + this.extension;
+        this.templateFile = Helpers.tmpPath(this.templateFile)
+
+        await fs.writeFileSync(this.templateFile, _tempBuffer)
+    }
+
+    getFileName() {
+        return this.fileName;
+    }
+
+    async loadFile(){
+        if(this.reportType === "word") {
+            // dont need code here
+        } else if ( this.reportType === "excel" ) {
+            await this.workbook.xlsx.readFile(this.templateFile);
+        }
+    	
+    }
+
+    async writeFile(){
+        if(this.reportType === "word") {
+            await fs.writeFileSync(this.returnFile, this.docBuffer)
+        } else if ( this.reportType === "excel" ) {
+            await this.workbook.xlsx.writeFile(this.returnFile);
+        }
+
+        // convert file
+        if(this.convert && this.convert === "pdf") {
+            let tmpFile =  await Utils.excelToPdf(this.returnFile);
+            //remove file temp
+            try {  fs.unlink(this.returnFile, (err) => {});  } catch{}
+            this.returnFile = tmpFile;
+        }
+
+        return this.returnFile;
+    }
+
+    setActiveSheet(idx){
+    	this.worksheet = this.workbook.getWorksheet(idx);
+        this.rowIdx = 0;//su dung do insert total
+        this.mergeColIndex = [];
+        this.sequenceType = null;
+        this.rowSequence = 0// cho so thu tu
+        this.totalIdxs = [];
+        //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRows", CONTENT: "Sheet " + idx });
+
+        return this.worksheet;
+    }
+
+    setColumnType(type, obj) {
+        switch(type) {
+            case "date" : {  this.dateColumns =  obj;break;}
+            case "string" : {  this.stringColumns =  obj;break;}
+            case "image" : {  this.imageColumns =  obj;break;}
+            case "qr" : {  this.qrColumns =  obj;break;}
+            case "imagePath" : {  this.imagePathColumns =  obj;break;}
+            case "sequence" : {  this.sequenceType =  obj;break;}
+            case "subStyle" : {  this.subStyle =  obj;break;}
+            case "totalStyle" : {  this.totalStyle =  obj;break;}
+            case "sumColumns" : {  this.sumColumns =  obj;break;}
+            case "pageBreak" : { this.pageBreak = obj; break;}
+            case "dataPerPage" : { this.dataPerPage = obj; break;}
+        }
+    }
+
+    async buildData(data) {
+        let _data = null;
+        let _idx = 0;
+        let _idx2 = 0;
+        this.imageColumns = this.imageColumns ? this.imageColumns : [];
+        try {
+            if(Array.isArray(data)) {
+                _data = [...data];
+                if(this.qrColumns?.length > 0) {
+                    while(_idx < this.qrColumns.length) {
+
+                        while(_idx2 < _data.length) {
+                            _data[_idx2][this.qrColumns[_idx]] = await Utils.generateQRCode( _data[_idx2][this.qrColumns[_idx]] );
+                            _idx2++;
+                        }
+
+                        this.imageColumns.push(this.qrColumns[_idx]);
+                        _idx++;
+                    }
+                }
+            } else {
+                _data = {...data};
+
+                while(_idx < this.qrColumns.length) {
+										if (_data[this.qrColumns[_idx]]) {
+											_data[this.qrColumns[_idx]] = await Utils.generateQRCode( _data[this.qrColumns[_idx]] );
+											this.imageColumns.push(this.qrColumns[_idx]);
+										}else {
+											console.log('buildData Error ',_data[this.qrColumns[_idx]]);
+										}
+
+                    _idx++;
+                }
+
+            }
+        } catch(e){
+            //console.log(e.message);
+         }
+        return _data;
+    }
+
+    insertLog(func, log) {
+        if(this.isDebugger) {
+            Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: func, CONTENT: `log Idx ${(this.logIdx++ + "").padStart(3, "0")} | ${log}`  });
+        }
+    }
+
+
+
+    findMerged(_rowIndex, _colIndex) {
+        const sheetModel = this.worksheet.model;
+        let lstMerge = sheetModel.merges;
+
+
+        lstMerge.forEach(x => {
+            const mergeRange = x;
+            const startMergeCell = mergeRange.split(':').shift();
+            const endMergeCell = mergeRange.split(':').pop();
+
+            const _row1 =  Number( (startMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+            const _col1 = this.excelCols.findIndex( x => x == (startMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number/// 
+            const _row2 = Number( (endMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+            const _col2 = this.excelCols.findIndex( x => x == (endMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number///
+
+            if(_rowIndex >= _row1 && _rowIndex <= _row2      &&      _colIndex >= _col1 && _colIndex <= _col2) {
+                return { 
+                        range: x
+                        , startCell: startMergeCell
+                        , endCell: endMergeCell
+                        , row1: _row1, col1: _col1
+                        , row2:_row2, col2:_col2 
+                };
+            }
+        });
+
+        return null;
+    }
+
+
+    async insertHeader(_startRow, _tempCol, _datas, _merge = null) {
+        const tempColIdx = this.excelCols.indexOf(_tempCol);
+        
+
+        this.insertLog("insertHeader", `1: insertHeader`);
+
+        if(_datas && _datas.length > 0) {
+            let cellTemp = this.worksheet.getRow(_startRow).getCell(tempColIdx);
+            try {
+                _datas.forEach( (q,rIdx) => {
+                    let _rowHeader = this.worksheet.getRow(_startRow + rIdx);
+                    q.forEach((w, cIdx) => {
+                        let _cellHeader = _rowHeader.getCell(cIdx + 1) //cidx start from 0, excel start from 1
+
+                        if(cIdx+1 > tempColIdx) { // clone style
+
+
+                            try {
+                                this._copyCellStyle(_startRow + rIdx, tempColIdx, _startRow + rIdx, cIdx + 1);
+                            } catch (e) {
+                                this.insertLog("insertHeader", `4: error - ${e.message}`);
+                            }
+                            
+                        }
+
+
+                        _cellHeader.value = w;
+                    });
+                    _rowHeader.commit();
+                });
+            } catch(q) {
+                this.insertLog("insertHeader",   `1.1:  if(_datas && _datas.length > 0) ${q.message}`);
+            }
+            
+
+            //xu ly phan merge header, nhung o bi null se bi merge theo cot truoc do
+            //  cross: merge chéo 
+            //  column: chi merge tren cung column
+            //  row: chi merge tren cung row
+
+            if(_merge) {
+                try {
+                    switch(_merge) {
+                        case "cross": {
+                            let loop = 0;
+                            for(let rIdx = 0; rIdx < _datas.length; rIdx++) {
+                                this.insertLog("insertHeader",   `cross ridx ${rIdx}`);
+                                if(++loop > 1000) break;
+                                for(let cIdx = 1; cIdx <= _datas[0].length; cIdx++ ) {
+                                    let _cell = this.worksheet.getRow(_startRow + rIdx).getCell(cIdx );
+                                    let mergeObj = this.findMerged(_startRow + rIdx, cIdx);
+                                    
+                                    this.insertLog("insertHeader",   `cross cidx ${cIdx}`);
+                                    if(!mergeObj)   {
+                                        
+                                        
+                                        let cIdx2 = cIdx;
+                                        let rIdx2 = rIdx;
+                                        while(++cIdx2 - 1 < _datas[0].length &&  !_datas[rIdx][cIdx2 - 1]) {
+                                            //cIdx2 = cIdx;
+                                        }
+
+                                        while( ++rIdx2 < _datas.length  && !_datas[rIdx2][cIdx-1] ) {
+                                            //rIdx2 = _startRow + rIdx ;
+                                        }
+                                        
+                                        rIdx2--;
+                                        cIdx2--;
+
+                                        if( cIdx != cIdx2 || rIdx != rIdx2 ) {
+                                            this.insertLog("insertHeader",   `merge rIdx ${rIdx} - cIdx ${cIdx}, rIdx2 ${rIdx2} - cIdx2 ${cIdx2} value: ${_datas[rIdx][cIdx-1]}`);
+                                            try {
+                                                this.worksheet.mergeCells(_startRow + rIdx , cIdx, _startRow + rIdx2, cIdx2);
+                                            } catch ( e ) {
+                                                this.insertLog("insertHeader",   `cross merge error ${e.message}`);
+                                            }
+                                            
+                                        }
+                                        
+                                        
+                                    } 
+                                    if(_datas[rIdx][cIdx-1])
+                                        _cell.value = _datas[rIdx][cIdx-1];
+                                }
+
+                            }
+
+                            break;
+                        }
+                        case "row": {
+                            _datas.forEach( (q,rIdx) => {
+                                let cIdx = 0;
+                                for(let i = 1; i <= q.length; ) {
+                                    let startMerge = i;
+                                    let endMerge = i;
+                                    let startCell = this.worksheet.getRow(_startRow + rIdx).getCell(startMerge );
+
+                                    cIdx = i;
+                                    while( ++cIdx - 1 < q.length  && !q[cIdx - 1] ) {
+                                        endMerge = cIdx;
+                                    }
+
+                                    i = cIdx;
+
+                                    if(startMerge !== endMerge) {
+                                        this.worksheet.unMergeCells(startCell.address);
+                                        this.worksheet.mergeCells(_startRow + rIdx , startMerge, _startRow + rIdx, endMerge);
+                                    }
+                                }
+                            });
+                            break;
+                        }
+                        case "column": {
+                            let colCount = _datas[0].length;
+                            for(let i = 1; i <= colCount; i++) {
+                                let rIdx = 0;
+                                for(let j = 0; j < _datas.length; )   {
+
+                                    let startMerge = _startRow + j;
+                                    let endMerge = _startRow + j;
+                                    let startCell = this.worksheet.getRow(startMerge).getCell(i);
+
+                                    rIdx = j;
+
+                                    while( ++rIdx < _datas.length  && !_datas[rIdx][i-1] ) {
+                                        endMerge = _startRow + rIdx ;
+                                    }
+                                    j = rIdx;
+
+                                    if(startMerge !== endMerge) {
+                                        this.worksheet.unMergeCells(startCell.address);
+                                        this.worksheet.mergeCells(startMerge , i, endMerge, i);
+                                    }
+
+                                }
+                            }
+
+                            break;
+                        }
+                        
+                    }
+                } catch(q){
+                    this.insertLog("insertHeader",  `1.2: if(_merge) ${q.message}`);
+                }
+                
+            }
+        }
+    }
+
+    async insertRows( startRow, datas, insBy = "name", _tempCol = null, isCloneRow = true ) {
+
+        let dateCols= this.dateColumns;
+        let stringCols= this.stringColumns;
+        let imageCols= this.imageColumns;
+        let imagePathCols= this.imagePathColumns;
+        const sheetModel = this.worksheet.model;
+        let lstMerge = sheetModel.merges;
+        let lstMergeTemp = [];
+        let lstNewMerge=[];
+        
+        if(isCloneRow) {
+            //move merge
+            lstMerge.forEach(x => {
+                const mergeRange = x;
+                const startMergeCell = mergeRange.split(':').shift();
+                const endMergeCell = mergeRange.split(':').pop();
+
+                const _row1 =  Number( (startMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+                const _col1 = this.excelCols.findIndex( x => x == (startMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number/// 
+                const _row2 = Number( (endMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+                const _col2 = this.excelCols.findIndex( x => x == (endMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number///
+                if(_row1 === startRow) {
+                    lstMergeTemp.push({ row1: _row1 , col1:_col1, row2: _row2, col2: _col2, range:x  });
+                    this.worksheet.unMergeCells(startMergeCell);
+                }
+
+                if(_row1 > startRow) {
+                    lstNewMerge.push({ row1: _row1+datas.length-1 , col1:_col1, row2: _row2+datas.length-1, col2: _col2, range: x   });
+                    this.worksheet.unMergeCells(startMergeCell);
+                }
+            });
+            
+
+            if(datas.length >= 1){
+                //this.worksheet.duplicateRow(startRow,datas.length-1, true);
+                let rowTemp = this.worksheet.getRow(startRow);
+                let cellTempValues = rowTemp.values;
+
+                for(let i = 0; i < datas.length + 1; i++) {
+                    if(i > 0){
+                        this.copyRow(startRow + i, startRow, 'c');
+                        //this.insertRow( startRow + i, cellTempValues, 'i' );
+                    }
+                    lstMergeTemp.forEach(x =>{
+                        lstNewMerge.push({ row1: startRow + i , col1:x.col1, row2: startRow + i, col2: x.col2  });
+                    })
+                }
+                this.worksheet.spliceRows(startRow, 1);
+            }
+        }
+        
+        
+        
+        // Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRows", CONTENT: imagePathCols.length });
+        for(let idx = 0; idx < datas.length; idx++) {
+            let row = this.worksheet.getRow(startRow + idx);
+
+            let rowSetAtt = [ "numFmt", "font", "alignment", "protection", "border", "fill", "hidden", "outlineLevel", "model", "height" ];
+            let isTotal = null;
+            let isTotal2 = null;
+            let rowStyle = null;
+
+            try {
+                let isDisplay = datas[idx]["IS_DISPLAY"] ;
+                if(isDisplay == '0' || isDisplay == 0 || isDisplay == false || isDisplay == 'false')  {
+                    row.hidden = true;
+                } else {
+                    row.hidden = false;
+                }
+            } catch {}
+            
+            try {isTotal = datas[idx]["ISTOTAL"] ;} catch {}
+            try {isTotal2 = datas[idx]["ISTOTAL2"] ;} catch {}
+            try {
+                rowStyle = this._buildJsonToObject( datas[idx]["ROWSTYLE"]) ;
+            } catch {}
+
+
+
+            if(isTotal){
+                try {
+                    let font = this.subStyle.font;
+                    if(font) row.font = font ;
+                } catch {
+                    
+                }
+            }
+
+            if(isTotal2){
+                try {
+                    let font = this.totalStyle.font;
+                    if(font) row.font = font ;
+                } catch {
+                    
+                }
+            }
+
+            let rowModel = row.model;
+
+            if(insBy === "name") {
+
+
+                for(let colIdx = rowModel.min; colIdx <= rowModel.max; colIdx++) {
+
+
+                    let cell = row.getCell(colIdx);
+    
+                    let col = (cell.value ? cell.value : "").toUpperCase();
+                    let cellValue = null;
+    
+                    //insert image
+                    if(imageCols.includes(col)) {
+                        let imageBuffer = datas[idx][col];
+                        
+                        const imgID = this.insertImage(imageBuffer);
+                        if( imgID ) {
+                            //mergecell
+                            if( cell.isMerged && cell.value )   {
+                                const idxMerge = sheetModel.merges.findIndex( x =>  x.includes(cell.address+":"));
+                                const mergeRange = sheetModel.merges[idxMerge];
+                                this.worksheet.addImage(imgID, mergeRange);
+                            }  else {
+                                this.worksheet.addImage(imgID, cell.address+":"+cell.address);
+                            }
+                        }
+                        
+                    }
+    
+                    //insert image path
+                    if(imagePathCols.includes(col)) {
+                        let path = datas[idx][col];
+                        
+                        const imgID = await this.insertPathImage(path);
+                        if( imgID ) {
+                            //mergecell
+                            if( cell.isMerged && cell.value )   {
+                                const idxMerge = sheetModel.merges.findIndex( x =>  x.includes(cell.address+":"));
+                                const mergeRange = sheetModel.merges[idxMerge];
+                                this.worksheet.addImage(imgID, mergeRange);
+                            }  else {
+                                this.worksheet.addImage(imgID, cell.address+":"+cell.address);
+                            }
+                        }
+                        
+                    }
+    
+    
+                    try { 
+                        if(col === "NO" || col === "STT")
+                            cellValue =  idx + 1;
+                        else
+                            cellValue =  datas[idx][col];
+                    } catch(e) { 
+                        cellValue = null;
+                    } 
+    
+                    if( dateCols && dateCols.includes(col) && cellValue) {
+    
+                        let m = moment(cellValue, "YYYYMMDD").utcOffset(0, true);
+                        cell.value = m.toDate();
+    
+                    } else if( stringCols && stringCols.includes(col) ) {
+                        cell.value = cellValue ;
+                    } else  if( imageCols && imageCols.includes(col) ) {
+                        cell.value = "";
+                    } else  if( imagePathCols && imagePathCols.includes(col) ) {
+                        cell.value = "";
+                    } else {
+                        cell.value = cellValue ;//? cellValue : col ;
+                    }
+    
+                    if(isTotal) {
+                        let keys = Object.keys(this.subStyle);
+                        keys.forEach( q => {
+                            if(rowSetAtt.includes(q) ) {
+                                try { cell[q] = this.subStyle[q] } catch (e) { };
+                            }
+                        });
+                    }
+                    if(isTotal2) {
+                        let keys = Object.keys(this.totalStyle);
+                        keys.forEach( q => {
+                            if(rowSetAtt.includes(q) ) {
+                                try { cell[q] = this.totalStyle[q] } catch (e) { };
+                            }
+                        });
+                    }
+                    try {
+                        if(rowStyle && rowStyle.length > 0) {
+                            for(let j = 0; j < rowStyle.length; j++) {
+                                let style = rowStyle[j]; 
+                                let fromIdx = style["from"];
+                                let toIdx = style["to"];
+                                let colName = style["colName"];
+
+                                if(colIdx >= fromIdx && colIdx <= toIdx) {
+                                    let keys = Object.keys(style);
+                                    keys.forEach( q => {
+                                        if(rowSetAtt.includes(q) && q != "from" && q != "to" && q != "colName" ) {
+                                            try { cell[q] = style[q] } catch (e) { };
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    }catch {}
+                }
+
+
+            } else { // insby = index
+
+                const tempColIdx = this.excelCols.indexOf(_tempCol);
+
+                let keys = Object.keys(datas[0]);
+
+                for( let colIdx = 0; colIdx < keys.length; colIdx++) {
+                    let cell = row.getCell(colIdx+1);
+
+                    if(colIdx+1 > tempColIdx && tempColIdx > -1) { // clone style
+
+
+                        try {
+                            this._copyCellStyle(startRow + idx, tempColIdx, startRow + idx, colIdx + 1);
+                        } catch (e) {
+                            this.insertLog("insertRows", `4: error - _copyCellStyle ${e.message}`);
+                        }
+                        
+                    }
+
+                    cell.value = datas[idx][keys[colIdx]];
+
+                    if(isTotal) {
+                        let keys2 = Object.keys(this.subStyle);
+                        keys2.forEach( q => {
+                            if(rowSetAtt.includes(q) ) {
+                                try { cell[q] = this.subStyle[q] } catch (e) { };
+                            }
+                        });
+                    }
+
+                    if(isTotal2) {
+                        let keys2 = Object.keys(this.totalStyle);
+                        keys2.forEach( q => {
+                            if(rowSetAtt.includes(q) ) {
+                                try { cell[q] = this.totalStyle[q] } catch (e) { };
+                            }
+                        });
+                    }
+                    
+                    try {
+                        if(rowStyle && rowStyle.length > 0) {
+                            for(let j = 0; j < rowStyle.length; j++) {
+                                let style = rowStyle[j]; 
+                                let fromIdx = style["from"];
+                                let toIdx = style["to"];
+                                let colName = style["colName"];
+
+                                if(colIdx >= fromIdx && colIdx <= toIdx) {
+                                    let keys = Object.keys(style);
+                                    keys.forEach( q => {
+                                        if(rowSetAtt.includes(q) && q != "from" && q != "to" && q != "colName" ) {
+                                            try { cell[q] = style[q] } catch (e) { };
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    }catch {}
+                    
+                }
+
+            }
+
+            
+
+            
+
+            row.commit();
+        }
+
+        lstNewMerge.forEach(x =>{
+            try {
+                this.worksheet.mergeCells(x.row1 , x.col1, x.row2, x.col2);
+            } catch(ee){
+                this.insertLog("insertRows",  `merge ${x["range"]} ${ee.message}`);
+            }
+            
+        })
+    }
+
+    insertRowsWithTotal( startRow, datas, totals ) {
+
+        this.rowIdx = startRow;
+
+        let row = this.worksheet.getRow(this.rowIdx);
+        let rowModel = row.model;
+        for(let colIdx = rowModel.min; colIdx <= rowModel.max; colIdx++) {
+            let cell = row.getCell(colIdx);
+            let col = (cell.value+"");
+            
+            if(!col) continue;
+
+            let totalIdx = totals.findIndex( x => x["column"] === col  );
+            if(totalIdx < 0) continue;
+
+            let totalProps = totals[totalIdx];
+            let idx = cell.col;
+            if(totalProps["columnIndex"] ) idx = totalProps["columnIndex"];
+
+            this.mergeColIndex.push( { col: col, index: idx } );
+        }
+
+
+        this.insertGroup(datas, totals, 0);
+
+        //grand total
+        let idxGrandTotal = totals.findIndex( x => x["isGrandTotal"] );
+
+        if( idxGrandTotal < 0) return;
+
+        this.insertTotal(datas, totals, idxGrandTotal, "");
+
+        this.worksheet.spliceRows(this.rowIdx, 1);
+
+        let rowSetAtt = [ "numFmt", "font", "alignment", "protection", "border", "fill", "hidden", "outlineLevel", "model", "height" ];
+        this.totalIdxs.forEach( x => {
+            let row = this.worksheet.getRow(x.col) ;
+            let font = x.props.font;
+            row.font = font ? font : { bold: true };
+            let rowModel = row.model;
+
+            let keys = Object.keys(x.props);
+
+            keys.forEach( q => {
+                if(rowSetAtt.includes(q) ) {
+
+                    for(let colIdx = rowModel.min; colIdx <= rowModel.max; colIdx++) {
+                        let cell = row.getCell(colIdx);
+                        try { cell[q] = x.props[q] } catch (e) { };
+                    }
+                    
+                }
+            });
+
+
+        });
+        
+    }
+
+    insertTotal ( _datas, _totals, _totalIdx, _groupKey) {
+        
+        try{
+
+            let totalProps = _totals[_totalIdx];
+            let row = this.worksheet.getRow(this.rowIdx) ;
+            let rowModel = row.model;
+
+            //row.font = { bold: false };
+
+            if(!totalProps["isDisplay"]) return;
+
+            this.totalIdxs.push({  col: this.rowIdx, props: totalProps  });
+
+            let rowTemp = this.worksheet.getRow(this.rowIdx);
+            let cellTempValues = rowTemp.values;
+            
+            //this.insertRow( this.rowIdx + 1, cellTempValues, 'i' );
+            this.copyRow(this.rowIdx + 1, this.rowIdx , 'c');
+
+            //this.worksheet.duplicateRow(this.rowIdx, 1, true);
+
+            for(let colIdx = rowModel.min; colIdx <= rowModel.max; colIdx++) {
+                let cell = row.getCell(colIdx);
+                let col = (cell.value?  cell.value : "").toUpperCase();
+                let cellValue = null;
+                //cell.font = { size: 13, bold: true };
+
+                if( col !== "" 
+                        &&  !this.stringColumns.includes(col) 
+                        && !this.dateColumns.includes(col) 
+                        && !this.imageColumns.includes(col)
+                        && col !== "NO" 
+                        && ( this.sumColumns.length === 0  || (this.sumColumns && this.sumColumns.includes(col)) )) {
+
+                    let colValues = Array.from(_datas, x => !isNaN(x[col]) ?  x[col] : null );
+
+                    switch((totalProps["type"] ? totalProps["type"] : "").toUpperCase()) {
+                        case "SUM": {
+
+                            cellValue = colValues.length > 0 ? colValues.reduce( (_total, _currVal) => _total + ( _currVal ? _currVal : 0  ) ) : 0;
+
+                            break;
+                        }
+                        case "AVARAGE": {
+                            
+                            cellValue = colValues.length > 0 ? colValues.reduce( (_total, _currVal) => _total + ( _currVal ? _currVal : 0  ) ) / ( colValues.length > 0 ? colValues.length : 1 ) : 0;
+
+                            break;
+                        }
+                        case "COUNT": {
+                            break;
+                        }
+                        default: {
+                            break;
+                        }
+                    }
+
+                }
+
+                cell.value = cellValue === 0 ? null : cellValue;
+            }
+
+            //merge total group
+            //set group value:
+            let groupVal = totalProps["text"] ? totalProps["text"] : (_groupKey +": "+ _datas.length +" record(s)");
+            let columnNames = groupVal.match(this.regexColumns);
+
+            if(columnNames != null && columnNames.length > 0) {
+                columnNames.forEach( q => {
+                    let col = Number( (q.match(this.regexColumnName))[1] );
+                    switch(col) {
+                        case 0: {
+                            groupVal = groupVal.replace(q, _groupKey);
+                            break;
+                        }
+                        case 1: {
+                            groupVal = groupVal.replace(q, _datas.length);
+                            break;
+                        }
+                        default: { 
+                            break; 
+                        }
+                    }
+                });
+            }
+
+
+            let uniqueIdx = Array.from( new Set(   Array.from( this.mergeColIndex, x => x[ "index" ] )    ) );
+            let currIdx = this.mergeColIndex.findIndex( x => x["col"] === totalProps["column"]);
+
+            let mergeProp = totalProps["merge"];
+
+            let mergeTo = mergeProp ? mergeProp["to"] : Math.max(...uniqueIdx);
+            let mergeFrom = mergeProp ? mergeProp["from"] : Math.min(...uniqueIdx);
+
+            if (currIdx >=0 ) {
+                mergeFrom = this.mergeColIndex[currIdx]["index"];
+            }
+
+            let cellGroup = row.getCell(mergeFrom);
+            cellGroup.value = groupVal;
+            this.worksheet.mergeCells(this.rowIdx, mergeFrom, this.rowIdx, mergeTo);
+            
+            row.commit();
+            this.rowIdx++;
+        } catch (ee) {
+            this.insertLog("insertTotal",  `rowIdx ${this.rowIdx} ${ee.message}`);
+        }
+    }
+
+    insertGroup ( _datas, _totals, _totalIdx) {
+        if( _totalIdx >=  _totals.filter( x => !x.isGrandTotal ).length ) { //xet cap cuoi cung de insert
+            this.rowSequence = this.sequenceType === "break" ? 0 : this.rowSequence; // continue or break;
+
+            this.copyRow(this.rowIdx + 1, this.rowIdx , 'c');
+            this.worksheet.spliceRows(this.rowIdx, 1);
+
+            for(let i = 0; i< _datas.length; i++) {
+                ++this.rowSequence;
+
+
+                let rowTemp = this.worksheet.getRow(this.rowIdx);
+                let cellTempValues = rowTemp.values;
+
+                
+                //this.insertRow( this.rowIdx + 1, cellTempValues, 'i' );
+                this.copyRow(this.rowIdx + 1, this.rowIdx , 'c');
+                //this.worksheet.duplicateRow(this.rowIdx, 1, true);
+
+                this.insertRowData(this.rowIdx, _datas[i], this.rowSequence);
+                
+                this.rowIdx++;
+            }
+        } else {
+            //loc lai data theo total va goi de quy
+            //insert row total, merge row total neu co
+            let uniqueGroup = Array.from( new Set(   Array.from( _datas, x => x[  _totals[_totalIdx]["column"]  ] )    ) );
+            for( let i = 0; i < uniqueGroup.length; i++ ) {
+                let uniqueGroupDatas = _datas.filter( x =>  x[  _totals[_totalIdx]["column"]  ] === uniqueGroup[i]  );
+
+                let startMerge = this.rowIdx;
+                this.insertGroup(uniqueGroupDatas, _totals, _totalIdx + 1);
+                let endMerge = this.rowIdx - 1;
+
+                this.insertTotal(uniqueGroupDatas, _totals, _totalIdx, uniqueGroup[i] );
+
+                if(  _totals[_totalIdx]["isMerge"]  ) {
+                    let uniqueIdx = Array.from( new Set(   Array.from( this.mergeColIndex, x => x[ "index" ] )    ) );
+                    let currIdx = this.mergeColIndex.findIndex( x => x["col"] === _totals[_totalIdx]["column"]);
+
+                    let mergeFrom = this.mergeColIndex[currIdx]["index"];
+
+                    this.worksheet.mergeCells(startMerge,  mergeFrom, endMerge, mergeFrom);
+                }
+
+            }
+        }
+    }
+
+    insertRowData(_rowIdx, _rowData, _no) {
+        //insert row
+        let row = this.worksheet.getRow(_rowIdx);
+        let rowModel = row.model;
+
+        let rowSetAtt = [ "numFmt", "font", "alignment", "protection", "border", "fill", "hidden", "outlineLevel", "model", "height" ];
+        let rowStyle = null;
+
+        for(let colIdx = rowModel.min; colIdx <= rowModel.max; colIdx++) {
+            let cell = row.getCell(colIdx);
+            let col = (cell.value ? cell.value : "").toUpperCase();
+            let cellValue = null;
+
+            try {
+                rowStyle = this._buildJsonToObject( _rowData["ROWSTYLE"]) ;
+            } catch {}
+
+            //insert image
+            if(this.imageColumns.includes(col)) {
+                let imageBuffer = _rowData[col];
+                
+                const imgID = this.insertImage(imageBuffer);
+                if( imgID ) {
+                    //mergecell
+                    if( cell.isMerged && cell.value )   {
+                        const idxMerge = sheetModel.merges.findIndex( x =>  x.includes(cell.address+":"));
+                        const mergeRange = sheetModel.merges[idxMerge];
+                        this.worksheet.addImage(imgID, mergeRange);
+                    }  else {
+                        this.worksheet.addImage(imgID, cell.address+":"+cell.address);
+                    }
+                }
+                
+            }
+
+            try { 
+                if(col === "NO" || col === "STT") {
+                    cellValue =  _no;
+                }
+                else
+                    cellValue =  _rowData[col];
+            } catch(e) { 
+                cellValue = null;
+            } 
+
+            if( this.dateColumns && this.dateColumns.includes(col) && cellValue) {
+
+                let m = moment(cellValue, "YYYYMMDD").utcOffset(0, true);
+                cell.value = m.toDate();
+
+            } else if( this.stringColumns && this.stringColumns.includes(col) ) {
+                cell.value = cellValue ;
+            } else  if( this.imageColumns && this.imageColumns.includes(col) ) {
+                cell.value = "";
+            } else {
+                cell.value = cellValue;
+            }
+
+            try {
+                if(rowStyle && rowStyle.length > 0) {
+                    for(let j = 0; j < rowStyle.length; j++) {
+                        let style = rowStyle[j]; 
+                        let fromIdx = style["from"];
+                        let toIdx = style["to"];
+                        let colName = style["colName"];
+
+                        if(colIdx >= fromIdx && colIdx <= toIdx) {
+                            let keys = Object.keys(style);
+                            keys.forEach( q => {
+                                if(rowSetAtt.includes(q) && q != "from" && q != "to" && q != "colName" ) {
+                                    try { cell[q] = style[q] } catch (e) { };
+                                }
+                            });
+                        }
+                    }
+                }
+            }catch {}
+        }
+        row.commit();
+    }
+    insertRange3( rangeTemplate, datas, isReplace = false, isMerges = true){
+        const sheetModel = this.worksheet.model;
+
+        const startCell = rangeTemplate.split(':').shift();
+        const endCell = rangeTemplate.split(':').pop();
+
+        const startRow =  Number( (startCell.match(this.regexCell))[2] ); //regex: string - character - number
+        const startColumn = this.excelCols.findIndex( x => x == (startCell.match(this.regexCell))[1] )  ; //regex: string - character - number/// 
+        const endRow = Number( (endCell.match(this.regexCell))[2] ); //regex: string - character - number
+        const endColumn = this.excelCols.findIndex( x => x == (endCell.match(this.regexCell))[1] )  ; //regex: string - character - number///
+
+        const rowCount = endRow - startRow + 1;
+        let lstMerge = sheetModel.merges;
+        let mergeLength = lstMerge.length;
+        let lstNewMerge=[];
+
+        if(datas.length === 1) {
+            this.insertRange( rangeTemplate, datas[0]);
+        } else {
+            lstMerge= this.worksheet.model.merges;
+            mergeLength = lstMerge.length;
+
+            for(let idx = 0; idx < datas.length - 1; idx++) {
+                for(let i = 0; i < rowCount; i++) {
+                    let target =  (rowCount *(1+idx) ) + startRow + i;
+                    let src = startRow +  (rowCount *idx ) + i;
+                    if(isReplace) {
+                        this.copyRow(target, src, 'c', isReplace );
+                    } else {
+                        this.copyRow(target, src, 'c' );
+                    }
+                }
+
+            }
+
+
+            for(let idx = 0; idx < datas.length - 1; idx++) {
+
+                //addmerge
+                for(var idxMerge = lstMerge.length - 1; idxMerge >= lstMerge.length - mergeLength; idxMerge--) {
+                    const mergeRange = lstMerge[idxMerge];
+                    const startMergeCell = mergeRange.split(':').shift();
+                    const endMergeCell = mergeRange.split(':').pop();
+
+                    const _row1 =  Number( (startMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+                    const _col1 = this.excelCols.findIndex( x => x == (startMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number/// 
+                    const _row2 = Number( (endMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+                    const _col2 = this.excelCols.findIndex( x => x == (endMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number///
+                    try {
+                        if( _row1 >= startRow && _col1 >= startColumn && _col2 <= endColumn) {
+                            let c1 = (startMergeCell.match(this.regexCell))[1] + (_row1 + (rowCount *(1+idx) ) );
+                            let c2 = (endMergeCell.match(this.regexCell))[1] + (_row2 + (rowCount *(1+idx) ) );
+                            lstNewMerge.push({ row1: _row1 + (rowCount *(1+idx) ) , col1:_col1, row2: _row2 + (rowCount *(1+idx) ), col2: _col2, range: `${c1}:${c2}`   });
+                        }
+                    }
+                    catch (eee) {console.log(eee.message) }
+                }
+
+                //add lai style do merge cell bi mat
+                for(let _ = 0; _ < rowCount; _++){
+                    this._copyStyle(startRow + _, (rowCount *(1+idx) ) + startRow  + _);
+                }
+            }
+
+        }
+        if(isMerges) {
+            lstNewMerge.forEach(x =>{
+                try {
+                    this.worksheet.mergeCells(x.row1 , x.col1, x.row2, x.col2);
+                } catch(ee){ console.log(ee.message) }
+            })
+        }
+
+        //insert range
+        for(let idx = 0; idx < datas.length - 1; idx++) {
+            //insert range trc do
+            this.insertRange("A1:A1", datas[idx],  
+                startRow +  (rowCount *idx ), //start row
+                startColumn,
+                endRow +  (rowCount *idx ),
+                endColumn
+            );
+
+            if(idx === datas.length - 2) { // insert cho row cuoi cung
+                this.insertRange( "A1:A1", datas[idx+1],  
+                    startRow +  (rowCount *(1+idx) ), //start row
+                    startColumn,
+                    endRow +  (rowCount *(1+idx) ),
+                    endColumn
+                );
+            }
+        }
+    }
+    insertRange2( rangeTemplate, datas, styles, details, key ) {
+        const sheetModel = this.worksheet.model;
+
+        const startCell = rangeTemplate.split(':').shift();
+        const endCell = rangeTemplate.split(':').pop();
+
+        const startRow =  Number( (startCell.match(this.regexCell))[2] ); //regex: string - character - number
+        const startColumn = this.excelCols.findIndex( x => x == (startCell.match(this.regexCell))[1] )  ; //regex: string - character - number/// 
+        const endRow = Number( (endCell.match(this.regexCell))[2] ); //regex: string - character - number
+        const endColumn = this.excelCols.findIndex( x => x == (endCell.match(this.regexCell))[1] )  ; //regex: string - character - number///
+
+        const rowCount = endRow - startRow + 1;
+        let lstMerge = sheetModel.merges;
+        let mergeLength = lstMerge.length;
+        let lstNewMerge=[];
+
+        if(datas.length === 1) {
+            this.insertRange(rangeTemplate, datas[0]);
+
+            try {
+                let keys = Object.keys(details);
+
+                //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: keys })
+                keys.forEach((q) => {
+                    let detailsByKey = details[q];
+                    let __startRow = detailsByKey["startRow"];
+                    let __data = detailsByKey["data"];
+                    let detailsByMaster = __data.filter(w => w[key] === datas[0][key]);
+
+                    this.insertRows(
+                        startRow + __startRow
+                        , detailsByMaster
+                        , 'name'
+                        , null
+                        , false
+                    );
+
+                });
+            }catch(e) {
+                Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: e.message  })
+            }
+
+        } else {
+            //move merge
+            lstMerge.forEach(x => {
+                const mergeRange = x;
+                const startMergeCell = mergeRange.split(':').shift();
+                const endMergeCell = mergeRange.split(':').pop();
+
+                const _row1 =  Number( (startMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+                const _col1 = this.excelCols.findIndex( x => x == (startMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number/// 
+                const _row2 = Number( (endMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+                const _col2 = this.excelCols.findIndex( x => x == (endMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number///
+                
+                if(_row1 > endRow) {
+                    
+                    lstNewMerge.push({ row1: _row1+(datas.length*rowCount)-2 , col1:_col1, row2: _row2+(datas.length*rowCount)-2, col2: _col2, range: x   });
+                    this.worksheet.unMergeCells(startMergeCell);
+                    
+                }
+            });
+
+            lstMerge= this.worksheet.model.merges;
+            mergeLength = lstMerge.length;
+
+            for(let idx = 0; idx < datas.length - 1; idx++) {
+                //let str = ''
+                for(let i = 0; i < rowCount; i++) {
+                    let target =  (rowCount *(1+idx) ) + startRow + i;
+                    let src = startRow +  (rowCount *idx ) + i;
+                    //str+= ( `${i} - target ${target} - src ${src} - ${(rowCount *(1+idx))}; ` );
+                    this.copyRow(target, src, 'c');
+                    
+                    if(this.pageBreak    
+                        &&    (idx + 1)% this.dataPerPage == 0 
+                        &&    (i === rowCount - 1 ) 
+                    ) {
+                        let rSrc = this.worksheet.getRow(src);
+                        rSrc.addPageBreak();
+                    }
+
+                    
+                }
+                //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRange", CONTENT: str});
+    
+                //addmerge
+                for(var idxMerge = lstMerge.length - 1; idxMerge >= lstMerge.length - mergeLength; idxMerge--) {
+                    const mergeRange = lstMerge[idxMerge];
+                    const startMergeCell = mergeRange.split(':').shift();
+                    const endMergeCell = mergeRange.split(':').pop();
+
+                    const _row1 =  Number( (startMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+                    const _col1 = this.excelCols.findIndex( x => x == (startMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number/// 
+                    const _row2 = Number( (endMergeCell.match(this.regexCell))[2] ); //regex: string - character - number
+                    const _col2 = this.excelCols.findIndex( x => x == (endMergeCell.match(this.regexCell))[1] )  ; //regex: string - character - number///
+
+                    let _c = (startMergeCell.match(this.regexCell))[1] +  (_row1 + (rowCount *(1+idx)) );
+                    try
+                    {
+                        
+                        
+                        //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRange", CONTENT:   `${_row1} > ${startRow} && ${_col1} >= ${startColumn} && ${_col2} <= ${endColumn}`  });
+                        if( _row1 >= startRow && _col1 >= startColumn && _col2 <= endColumn) {
+                            
+                            let c1 = (startMergeCell.match(this.regexCell))[1] + (_row1 + (rowCount *(1+idx) ) );
+                            let c2 = (endMergeCell.match(this.regexCell))[1] + (_row2 + (rowCount *(1+idx) ) );
+                           
+                            //this.worksheet.unMergeCells(c1 );
+
+                            lstNewMerge.push({ row1: _row1 + (rowCount *(1+idx) ) , col1:_col1, row2: _row2 + (rowCount *(1+idx) ), col2: _col2, range: `${c1}:${c2}`   });
+                        }
+                            
+                    }
+                    catch (eee) {
+                        Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRange", CONTENT: `unmerge ${_c} ${eee.message}`});
+                    }
+                }
+                
+                //add lai style do merge cell bi mat
+                for(let _ = 0; _ < rowCount; _++){
+                    this._copyStyle(startRow + _, (rowCount *(1+idx) ) + startRow  + _);
+                }
+
+                
+            }
+
+            lstNewMerge.forEach(x =>{
+                try {
+                    this.worksheet.mergeCells(x.row1 , x.col1, x.row2, x.col2);
+                } catch(ee){
+                    this.insertLog("insertRows",  `merge ${x["range"]} ${ee.message}`);
+                }
+                
+            })
+
+
+            for(let idx = 0; idx < datas.length - 1; idx++) {
+
+                let _style = null;
+                let _styleNext = null; //loop not include last row
+                if(styles) {
+                    try { _style = styles[idx]; _styleNext = styles[idx+1]; } 
+                    catch(e) { Utils.Logger({ LVL: "error", MODULE: "ReportHelper", FUNC: "insertRange2", CONTENT: e.message  })}
+                }
+
+                //insert range trc do
+                this.insertRange( "A1:A1", datas[idx],  
+                                    startRow +  (rowCount *idx ), //start row
+                                    startColumn,
+                                    endRow +  (rowCount *idx ),
+                                    endColumn,
+                                    _style
+                                );
+                
+                try {
+                    let keys = Object.keys(details);
+
+                    //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: keys })
+                    keys.forEach((q) => {
+                        let detailsByKey = details[q];
+                        let __startRow = detailsByKey["startRow"];
+                        let __data = detailsByKey["data"];
+                        let detailsByMaster = __data.filter(w => w[key] === datas[idx][key]);
+
+                        this.insertRows(
+                            startRow +  (rowCount *idx ) + __startRow
+                            , detailsByMaster
+                            , 'name'
+                            , null
+                            , false
+                        );
+
+                    });
+                }catch(e) {
+                    Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: e.message  })
+                }
+
+                if(idx === datas.length - 2) { // insert cho row cuoi cung
+                    this.insertRange( "A1:A1", datas[idx+1],  
+                                    startRow +  (rowCount *(1+idx) ), //start row
+                                    startColumn,
+                                    endRow +  (rowCount *(1+idx) ),
+                                    endColumn,
+                                    _styleNext
+                                );
+
+                    try {
+                        let keys = Object.keys(details);
+
+                        //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: keys })
+                        keys.forEach((q) => {
+                            let detailsByKey = details[q];
+                            let __startRow = detailsByKey["startRow"];
+                            let __data = detailsByKey["data"];
+                            let detailsByMaster = __data.filter(w => w[key] === datas[idx+1][key]);
+
+                            this.insertRows(
+                                startRow +  (rowCount *(1+idx) ) + __startRow
+                                , detailsByMaster
+                                , 'name'
+                                , null
+                                , false
+                            );
+
+                        });
+                    }catch(e) {
+                        Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: e.message  })
+                    }
+                }
+               // Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRange", CONTENT: `startRow ${startRow +  (rowCount *idx )} endRow ${endRow +  (rowCount *idx )}` });
+            }
+        }
+
+      
+        
+    }
+
+    insertRange( range, obj, _startRow, _startColumn, _endRow, _endColumn, _style){
+    	const startCell = range.split(':').shift();
+    	const endCell = range.split(':').pop();
+
+    	const startRow = _startRow ? _startRow : Number( (startCell.match(this.regexCell))[2] ); //regex: string - character - number
+        const startColumn = _startColumn ? _startColumn : this.excelCols.findIndex( x => x == (startCell.match(this.regexCell))[1] )  ; //regex: string - character - number/// 
+
+        const endRow = _endRow ? _endRow : Number( (endCell.match(this.regexCell))[2] ); //regex: string - character - number
+        const endColumn = _endColumn ? _endColumn : this.excelCols.findIndex( x => x == (endCell.match(this.regexCell))[1] )  ; //regex: string - character - number///
+
+        const sheetModel = this.worksheet.model;
+
+        for(let idx = startRow; idx <= endRow; idx++) {
+
+            let row = this.worksheet.getRow(idx);
+
+            for(let colIdx = startColumn; colIdx <= endColumn; colIdx++) {
+                let cell = row.getCell(colIdx);
+
+                let cellText = cell.value;
+                let cellValue = null;
+
+                try {
+                    let columnNames = cellText.match(this.regexColumns);
+
+                    if(columnNames != null && columnNames.length > 0) {
+                        let col ="";
+                        let colStyle = null;
+                        columnNames.forEach( q => {
+                            col = (q.match(this.regexColumnName))[1].toUpperCase() ;
+                            
+                            //insert image
+                            if(this.imageColumns.includes(col)) {
+
+                                let imageBuffer = obj[col];
+                                const imgID = this.insertImage(imageBuffer);
+                                if(imgID) {
+                                    //mergecell
+                                    if( cell.isMerged && cell.value )   {
+                                        const idxMerge = sheetModel.merges.findIndex( x =>  x.includes(cell.address+":"));
+                                        const mergeRange = sheetModel.merges[idxMerge];
+                                        this.worksheet.addImage(imgID, mergeRange);
+                                    }  else {
+                                        this.worksheet.addImage(imgID, cell.address+":"+cell.address);
+                                    }
+                                }
+                                
+                            }
+                            
+
+                            
+                            try { 
+                                if(columnNames.length == 1 && col.length == cellText.length - 3) {
+                                    cellValue = obj[col];
+                                } else {
+                                    let _val = obj[col] == null ? "" : obj[col];
+                                    cellText =  cellText.replace( q, _val ) ;
+                                }
+                                
+                            } catch(e) {
+                                console.log(e.message)
+                                cellValue = null;
+                            } 
+                        });
+                        cellValue = columnNames.length == 1 && col.length == cellText.length - 3 ?  cellValue : cellText  ;
+
+                        
+                        if( columnNames.length == 1 && col.length == cellText.length - 3 ) {
+
+                            if( this.dateColumns && this.dateColumns.includes(col) && cellValue) {
+
+                                let m = moment(cellValue, "YYYYMMDD").utcOffset(0, true);
+                                cell.value = m.toDate();
+
+                            } else if( this.stringColumns && this.stringColumns.includes(col) ) {
+                                cell.value = cellValue ;
+                            } else if( this.imageColumns && this.imageColumns.includes(col) ) {
+                                cell.value = "";
+                            } else {
+                               // cell.value = cellValue ? cellValue : cellText;
+                               cell.value = cellValue;
+                            }
+                            
+                        } else {
+                            //cell.value = cellValue ? cellValue : cellText;
+                            cell.value = cellValue;
+                        }
+
+                        if(_style && _style[col] != null && _style[col] != "" && _style[col] != "null" && _style[col] != undefined) {
+                            //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRange", CONTENT: `Cell ${cell.address} - col ${col}: ${_style[col]} `  })
+                            try { colStyle = this._buildStyle( _style[col] ) } catch (q)  { colStyle = null;  }
+                            let keys = Object.keys(colStyle);
+                            let rowSetAtt = [ "numFmt", "font", "alignment", "protection", "border", "fill", "hidden", "outlineLevel", "model", "height" ];
+                            keys.forEach(q => {
+                                if(rowSetAtt.includes(q) ) {
+                                    try { cell[q] = colStyle[q] } catch (e) { };
+                                    
+                                }
+                            });
+
+                        }
+                    }
+                } catch (e) {
+                   // Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRange", CONTENT: e.message})
+                }
+            }
+            row.commit();
+        }
+    }
+
+    async insertImages(data, rowAdded) {
+        const sheetModel = this.worksheet.model;
+
+        for(let i = 0; i< data.length; i++) {
+            let type = data[i]["TYPE"];
+            let startCell = data[i]["CELL"];
+
+            let startRow =  Number( (startCell.match(this.regexCell))[2] ); //regex: string - character - number
+            let startColumn = this.excelCols.findIndex( x => x == (startCell.match(this.regexCell))[1] )  ;  //regex: string - character - number/// 
+
+            let row = this.worksheet.getRow(startRow + rowAdded);
+            let cell = row.getCell(startColumn);
+
+            try {
+                if(type ==="PATH") {
+                    let path = data[i]["PATH"];
+                        
+                    let imgID = await this.insertPathImage(path);
+                    Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertPathImage", CONTENT: imgID})  
+                    if( imgID ) {
+                        //mergecell
+                        if( cell.isMerged )   {
+                            let idxMerge = sheetModel.merges.findIndex( x =>  x.includes(cell.address));
+                            let mergeRange = sheetModel.merges[idxMerge];
+                            this.worksheet.addImage(imgID, mergeRange);
+                            Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertPathImage", CONTENT: cell.address})  
+                        }  else {
+                            this.worksheet.addImage(imgID, cell.address+":"+cell.address);
+                            Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertPathImage", CONTENT: cell.address})  
+                        }
+                    }
+                } else {
+                    let imageBuffer = data[i]["IMAGE"];
+                    let imgID = this.insertImage(imageBuffer);
+                    
+                    if(imgID) {
+                        //mergecell
+                        if( cell.isMerged )   {
+                            let idxMerge = sheetModel.merges.findIndex( x =>  x.includes(cell.address));
+                            let mergeRange = sheetModel.merges[idxMerge];
+                            this.worksheet.addImage(imgID, mergeRange);
+                        }  else {
+                            this.worksheet.addImage(imgID, cell.address+":"+cell.address);
+                        }
+                    }
+                }
+            }catch (e) {
+                Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertImages", CONTENT: startCell +" "+e.message})
+            }
+        }
+
+    }
+
+    insertImage(imageBuffer) { 
+        let imageID = null;
+        let tmpBuffer = imageBuffer;
+        let tmp = null;
+        let imageBase64= null;
+        if(imageBuffer) {
+            if(typeof imageBuffer == 'object' && imageBuffer['type'] == 'Buffer') {
+                tmpBuffer = imageBuffer.data;
+            }
+
+            if(typeof imageBuffer != "string") {
+                tmp = Utils._arrayBufferToBase64(tmpBuffer);
+                imageBase64 = "data:image/png;base64,"+ tmp;
+            } else {
+                imageBase64 = imageBuffer;
+            }
+
+            imageID = this.workbook.addImage({
+                base64: imageBase64,
+                extension: 'png'
+            });
+
+            if(imageID === "" || !imageID) {
+                imageBase64 = "data:image/jpeg;base64, "+ tmp;
+                imageID = this.workbook.addImage({
+                    base64: imageBase64,
+                    extension: 'jpeg'
+                });
+            }
+        }
+
+        return imageID;
+    }
+
+
+    async insertPathImage(path) { 
+        let imageID = null;
+        let img  = null;
+        let imageBuffer = null;    
+        try
+        {
+            img = Helpers.resourcesPath(path);     
+            imageBuffer =  await Utils.readFile(img);            
+        } 
+        catch (e) {       
+            Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertPathImage", CONTENT: e.message})  
+        }
+        
+
+        if(imageBuffer) {
+            let tmp = Utils._arrayBufferToBase64(imageBuffer);
+            let imageBase64 = "data:image/png;base64,"+ tmp
+            imageID = this.workbook.addImage({
+                base64: imageBase64,
+                extension: 'png'
+            });
+
+            if(imageID === "" || !imageID) {
+                imageBase64 = "data:image/jpeg;base64, "+ tmp;
+                imageID = this.workbook.addImage({
+                    base64: imageBase64,
+                    extension: 'jpeg'
+                });
+            }
+        }
+
+        return imageID;
+    }
+
+    setHideColumns(columns, isHide) {
+        if(columns && columns.length > 0) {
+            for(let i = 0 ; i < columns.length; i++) {
+                let col = this.worksheet.getColumn( columns[i] );
+                col.hidden  = isHide;
+            }
+        }
+    }
+
+    copySheet(datas) {
+        let sheetModel = this.worksheet.model;
+
+        for(let i = 0; i < datas.length; i++) {
+            let cloneSheet = this.workbook.addWorksheet("Sheet")
+
+            cloneSheet.model = sheetModel;
+            cloneSheet.name = datas[i]["NAME"];
+        }
+    }
+
+    insertRow(pos, value, styleOption = 'n') {
+        this.worksheet.spliceRows(pos, 0, value);
+        this._setStyleOption(pos, styleOption);
+        return this.worksheet.getRow(pos);
+    }
+
+    copyRow(pos, src, styleOption = 'c', isReplace = false) {
+        let rSrc = this.worksheet.getRow(src);
+        let values = rSrc.values;
+        this.worksheet.spliceRows(pos, isReplace ? 1 :  0, values);
+        this._setStyleOption(pos, styleOption, src);
+        return this.worksheet.getRow(pos);
+    }
+
+    _setStyleOption(pos, styleOption = 'n', src = -1) {
+        if (styleOption === 'o' && this.worksheet.findRow(pos + 1) !== undefined) {
+          this._copyStyle(pos + 1, pos);
+        } else if (styleOption === 'i' && this.worksheet.findRow(pos - 1) !== undefined) {
+          this._copyStyle(pos - 1, pos);
+        } else if( styleOption === 'c' && this.worksheet.findRow(src) !== undefined ) {
+            this._copyStyle(src, pos);
+        }
+    }
+
+    _copyStyle(src, dest) {
+        let rSrc = this.worksheet.getRow(src);
+        let rDst = this.worksheet.getRow(dest);
+        rDst.style = {...rSrc.style};
+        // eslint-disable-next-line no-loop-func
+        rSrc.eachCell({includeEmpty: true}, (cell, colNumber) => {
+          rDst.getCell(colNumber).style = {...cell.style};
+        });
+        rDst.height = rSrc.height;
+        rDst.hidden = rSrc.hidden;
+    }
+
+    _copyCellStyle(_srcRow, _srcCol, _destRow, _destCol) {
+        let rSrc = this.worksheet.getRow(_srcRow);
+        let rDst = this.worksheet.getRow(_destRow);
+
+        let srcCell = rSrc.getCell(_srcCol);
+        let destCell = rDst.getCell(_destCol);
+
+        destCell.style = {...srcCell.style};
+    }
+
+    _buildStyle(_strStyle) {
+        //let rowSetAtt = [ "numFmt", "font", "alignment", "protection", "border", "fill", "hidden", "outlineLevel", "model", "height" ];
+
+        
+        let style = {};
+
+        let listStyle = _strStyle.split(';');
+        listStyle.forEach(e => {
+            let key_val = e.split(':');
+
+            switch(key_val[0].trim()) {
+                case "background-color": {
+                    style["fill"] ={
+                        type: 'pattern',
+                        pattern:'solid',
+                        fgColor:{ argb: key_val[1].trim()},
+                        bgColor:{ argb: key_val[1].trim()}
+                    };
+                    break;
+                }
+                case "font": {
+                    style["font"] ={};
+
+                    let tmp = key_val[1].trim().replace('{','').replace('}','');
+                    let tmp2 = tmp.split(',');
+                    tmp2.forEach(x => {
+                        let key_val2 = x.split(':');
+
+                        switch(key_val2[0].trim()) {
+                            case "name": {  style["font"][key_val2[0].trim()] = key_val2[1].trim();  break;  }
+                            case "color": {
+                                style["font"][key_val2[0].trim()] = { argb: key_val2[1].trim()} ;
+                                break;
+                            }
+                            case "size": {  style["font"][key_val2[0].trim()] = Number(key_val2[1].trim()); break;  }
+                            case "family": {   style["font"][key_val2[0].trim()] = Number(key_val2[1].trim());  break;  }
+                            case "bold": {  style["font"][key_val2[0].trim()] = key_val2[1].trim() =="true" ? true : false ;  break;  }
+                            case "italic": {  style["font"][key_val2[0].trim()] = key_val2[1].trim() =="true" ? true : false ;  break;  }
+                            case "underline": {  style["font"][key_val2[0].trim()] = key_val2[1].trim() =="true" ? true : false ;  break;  }
+                        }
+
+                    });
+
+                }
+            }
+
+        });
+        //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "insertRange", CONTENT: JSON.stringify(style)});
+        return style;
+
+    }
+
+    _buildJsonToObject(strJson) {
+        let jsonStr="";
+        try {
+            jsonStr = strJson.replace(/(\w+:)|(\w+ :)/g, function(matchedStr) {
+                return '"' + matchedStr.substring(0, matchedStr.length - 1) + '":';
+            });
+        } catch(e) {
+            if(strJson!== undefined && strJson!= null )
+                Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "_buildJsonToObject", CONTENT: `Cannot parse '${strJson}' to object.`});
+        }
+        return  !!!jsonStr? null : JSON.parse(jsonStr);
+    }
+
+
+
+
+
+    //vng-207 
+    //20210501: add report word - doc-template
+    async fillData(datas, details, key, header = null) {
+
+        this.buildWordDatas(datas, details, key);
+
+        if(this.wordData) {
+            const template = fs.readFileSync(this.templateFile);
+            this.wordData["header"] = header;
+            this.docBuffer = await Word.createReport({
+                template,
+                data: this.wordData,
+                cmdDelimiter: ['{{', '}}'],
+                additionalJsContext:{
+                    IMAGE: (_byteArray, _width, _height, _fileExtension) =>{ 
+                        if(_byteArray && _byteArray.length > 0) {
+                            let data = Utils._arrayBufferToBase64(_byteArray);
+                            return { width: _width, height: _height, data, extension: _fileExtension ? '.'+_fileExtension : '.png' };
+                        }
+
+                        return null;
+                    }
+                }
+            });
+        }
+    }
+
+    //datas: master data
+    //details: details data of 1 master data, ex: items in a bill
+    //         details will add to master data by [GROUP BY] 1 [KEY].ex:
+    //         first master data has key name [MASTER_PK] with value [9999]
+    //         10/100 rows of details data also have a key name [MASTER_PK] with same value [9999], so that 10/100 rows will add to master object data
+    // {
+    //     [
+    //         {
+    //             MASTER_PK: 9999,
+    //             DETAILS: [
+    //                 {MASTER_PK:9999, ITEM: "A"},
+    //                 {MASTER_PK:9999, ITEM: "B"},
+    //                 {MASTER_PK:9999, ITEM: "C"},
+    //                 {MASTER_PK:9999, ITEM: "D"},
+    //                 {MASTER_PK:9999, ITEM: "E"},
+    //                 {MASTER_PK:9999, ITEM: "F"},
+    //                 {MASTER_PK:9999, ITEM: "G"},
+    //                 {MASTER_PK:9999, ITEM: "H"},
+    //                 {MASTER_PK:9999, ITEM: "I"},
+    //                 {MASTER_PK:9999, ITEM: "J"},
+    //             ]
+    //         }
+    //     ]
+    // }
+    buildWordDatas(datas, details, key) {
+        
+        if(datas) {
+            datas.forEach(x =>{
+                let obj = {...x};
+                let keyValue = x[key];
+                
+                try {
+                    let keys = Object.keys(details);
+
+                    //Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: keys })
+                    keys.forEach((q) => {
+                        let detailsByKey = details[q];
+                        let detailsByMaster = detailsByKey.filter(w => w[key] === keyValue);
+                        obj[q] = [...detailsByMaster];
+                       // Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: JSON.stringify(detailsByKey)  })
+                    });
+                }catch(e) {
+                    Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: e.message  })
+                }
+
+
+                //breakpage
+                obj["pagebreak"] = '</w:p><w:p><w:br w:type="page" /></w:p>';
+                this.wordData["word"].push(obj);
+            })
+
+                
+        } else {
+            Utils.Logger({ LVL: "error", MODULE: "ReportController", FUNC: "buildDatas", CONTENT: "No data found."  })
+        }
+    }
+
+    async createWorkbook(p_crt_by,template, reporttype,convert){
+        let fileTemplate = template;
+        this.reportType = reporttype;
+        this.convert = convert
+        this.extension = ".xlsx";
+        if(this.reportType === "word") {
+            this.extension = ".docx"
+        }
+        this.fileName = (fileTemplate.split("/").pop())
+                        .replace(".xlsx","").replace(".xls","")
+                        .replace(".docx","").replace(".doc","")
+                        ;
+        this.templateFile = Helpers.resourcesPath(fileTemplate);
+        this.reportPath = this.fileName + "_" + p_crt_by + this.extension;
+        this.returnFile = Helpers.tmpPath(this.reportPath);
+        await this.loadFile();
+    }
+    async dowloadWorkbook(){
+        let rtnFile = await this.writeFile();
+        const current = new Date();
+        const year = current.getFullYear();
+        let month = current.getMonth() + 1;
+        let day = current.getDate()
+        if (day < 10) {
+            day = "0" + day
+        }
+        if (month < 10) {
+            month = "0" + month
+        }
+       
+        const dir = ROOT_DIR_FILES + '/pdf/' + year + '/' + month
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true }, err => { console.log(err) })
+        }
+        
+        const unixtime = Date.now();
+        const rtnFile2 = rtnFile.replace(/\\/g, '/');
+        const fileName = '/pdf/' + year + '/' + month + "/rpt-" + unixtime + "-" + (rtnFile2.split("/").pop());
+        const destinationFile = dir + "/rpt-" + unixtime + "-" + (rtnFile2.split("/").pop());
+        await Utils.copyFile(rtnFile, destinationFile);
+        let token = AES.encrypt(fileName + "|" + year + month + day, APP_KEY);
+        token = token.replace(/\+/g, 'p1L2u3S').replace(/\//g, 's1L2a3S4h').replace(/=/g, 'e1Q2u3A4l');
+
+        let url = APP_URL_LOCAL + "/api/dso/getfiletoken?file_name=" + fileName + "&token=" + token;
+        return url;
+    }
+    
+
+
+    async MakeReport(p_crt_by, p_language, template, excel, doc, reporttype, convert, _db2) {
+        try {
+            let fileTemplate = template;
+            
+            this.reportType = reporttype;
+            this.convert = convert;
+            this.extension = ".xlsx";
+            if(this.reportType === "word") {
+                this.extension = ".docx"
+            }
+
+            this.fileName = (fileTemplate.split("/").pop())
+                            .replace(".xlsx","").replace(".xls","")
+                            .replace(".docx","").replace(".doc","")
+                            ;
+            this.templateFile = Helpers.resourcesPath(fileTemplate);
+            this.reportPath = this.fileName + "_" + p_crt_by + this.extension;
+            this.returnFile = Helpers.tmpPath(this.reportPath);
+            await this.loadFile();
+
+
+            let rptName = this.getFileName();
+            let rtnFile = null;
+
+            let callProcCursor = async (proc, params, param_extra, p_language, p_crt_by, _db2) => {
+                let _params = [...params];
+                let _param_extra = !!param_extra ? [...param_extra] : null;
+                try {
+                    for (let idx in _params) {
+                        _params[idx] = _params[idx] == "null" || _params[idx] == undefined || _params[idx] == null ? "" : _params[idx];
+                    }
+                    if(!!_param_extra) {
+                        for (let idx in _param_extra) {
+                            _param_extra[idx] = _param_extra[idx] == "null" || _param_extra[idx] == undefined || _param_extra[idx] == null ? "" : _param_extra[idx];
+                        }
+                    }
+                } catch (q) {}
+                
+                let result = null;
+                try {
+                    result = await DBService.callProcCursor(proc, _params, p_language, p_crt_by, _db2);
+                }  catch (ex) {
+                    console.log(ex.message);
+                }
+
+                if(!!result && result.length > 0 ) return result;
+
+                //goi tiep neu co extra para (dung de them para site moi va tranh anh huong site cu)
+                if(!!_param_extra && _param_extra.length > 0) {
+
+                    Utils.Logger({ LVL: "error", MODULE: "ReportHelper", FUNC: "MakeReport", CONTENT: "Call Extra parameter " + _param_extra.join(', '), });
+
+                    _params.push(..._param_extra);
+                    result = await DBService.callProcCursor(proc, _params, p_language, p_crt_by, _db2);
+                } 
+                return result;
+            }
+
+            
+
+
+            if (reporttype && reporttype === "word") {
+                doc = JSON.parse(doc);
+
+                if (doc) {
+                    let key = doc["KEY"];
+                    let proc = doc["proc"];
+                    let params = doc["params"];
+                    let param_extra = doc["param_extra"];
+                    let details = doc["details"];
+                    let header = doc["header"];
+
+                    let masterData = null;
+                    let dataHeader = null;
+                    let detailData = {};
+
+                    //master data
+                    let result = await callProcCursor(proc, params, param_extra, p_language, p_crt_by, _db2);
+
+                    if (result) {
+                        masterData = result;
+                        dataHeader = result[0];
+                    }
+
+                    if (details) {
+                        let tables = Object.keys(details);
+                        const promises = tables.map(async(x) => {
+                            let obj = details[x];
+
+                            let proc2 = obj["proc"];
+                            let param2 = obj["params"];
+                            let param_extra2 = obj["param_extra"];
+
+                            let result2 = await callProcCursor(proc2, param2, param_extra2, p_language, p_crt_by, _db2);
+
+                            if (result2) {
+                                detailData[x] = result2;
+                            }
+                        });
+                        await Promise.all(promises);
+                    }
+
+                    if (header) {
+                        let proc2 = header["proc"];
+                        let param2 = header["params"];
+                        let param_extra2 = header["param_extra"];
+                        let data2 = header["data"];
+
+                        if (!data2) {
+                            let result2 = await callProcCursor(proc2, param2, param_extra2, p_language, p_crt_by, _db2);
+
+                            if (result2) {
+                                data2 = result2;
+                            }
+                        }
+
+                        dataHeader = data2;
+                    }
+
+                    await this.fillData(masterData, detailData, key, dataHeader);
+                }
+
+
+
+                //rtnFile = await that.writeFile();
+            } else {
+
+                excel = JSON.parse(excel);
+                let that = this;
+                let wait = (ms) => {
+                    return new Promise(resolve => setTimeout(resolve, ms));
+                }
+
+                if (excel) {
+                    const promises = excel.map(async(sheet,idx) => {
+                        await wait(idx*2000);
+
+                        const sheetIdx = sheet["sheet"];
+                        const copySheet = sheet["copySheet"];
+                        const insertHeader = sheet["insertHeader"];
+                        const insertRange = sheet["insertRange"];
+                        const insertRange2 = sheet["insertRange2"];
+                        const insertRows = sheet["insertRows"];
+                        const hideColumns = sheet["hideColumns"];
+                        const insertImages = sheet["insertImages"];
+
+                        that.setActiveSheet(sheetIdx);
+
+
+                        if (copySheet) {
+                            const proc = sheet["proc"];
+                            let params = sheet["params"];
+                            let param_extra = sheet["param_extra"];
+                            let data = sheet["data"]; //data custom like HEADER
+
+                            if (!data) {
+                                let result = await callProcCursor(proc, params, param_extra, p_language, p_crt_by, _db2);
+
+                                if (result) {
+                                    data = result;
+                                }
+                            }
+                            that.copySheet(data);
+                        }
+
+                        //insertRange: data type: object {}
+                        if (insertRange) {
+                            const promises_insertRange = insertRange.map(async(r) => {
+                                const range = r["range"];
+                                const proc = r["proc"];
+                                let params = r["params"];
+                                let param_extra = r["param_extra"];
+                                let data = r["data"]; //data custom like HEADER
+                                const dateColumns = r["dateColumns"];
+                                const stringColumns = r["stringColumns"];
+                                const imageColumns = r["imageColumns"];
+                                const imagePathColumns = r["imagePathColumns"];
+
+                                if (dateColumns) {
+                                    that.setColumnType("date", dateColumns);
+                                }
+                                if (stringColumns) {
+                                    that.setColumnType("string", stringColumns);
+                                }
+                                if (imageColumns) {
+                                    that.setColumnType("image", imageColumns);
+                                }
+                                if (imagePathColumns) {
+                                    that.setColumnType("imagePath", imagePathColumns);
+                                }
+
+                                if (!data) {
+                                    if (imageColumns) {
+                                        if (DB_CONNECTION == "oracle") {
+                                            oracledb.fetchAsBuffer = [oracledb.BLOB];
+                                        }
+                                    }
+
+                                    let result = await callProcCursor(proc, params, param_extra, p_language, p_crt_by, _db2);
+
+                                    if (result) {
+                                        data = result[0];
+                                    }
+                                }
+                                that.insertRange(range, data);
+                            });
+
+                            await Promise.all(promises_insertRange);
+                        }
+
+                        if (insertRange2) {
+                            const promises_insertRange2 = insertRange2.map(async(r) => {
+                                const range = r["range"];
+                                const proc = r["proc"];
+                                let params = r["params"];
+                                let param_extra = r["param_extra"];
+                                let dataStyle = null;
+                                let data = r["data"]; //data custom like HEADER
+                                const dateColumns = r["dateColumns"];
+                                const stringColumns = r["stringColumns"];
+                                const imageColumns = r["imageColumns"];
+                                const imagePathColumns = r["imagePathColumns"];
+                                const procStyle = r["procStyle"];
+                                const pageBreak = r["pageBreak"];
+                                const dataPerPage = r["dataPerPage"];
+
+                                const key = r["KEY"];
+                                let _details = r["details"];
+                                let _detailData = {};
+
+
+                                if (dateColumns) {
+                                    that.setColumnType("date", dateColumns);
+                                }
+                                if (stringColumns) {
+                                    that.setColumnType("string", stringColumns);
+                                }
+                                if (imageColumns) {
+                                    that.setColumnType("image", imageColumns);
+                                }
+                                if (imagePathColumns) {
+                                    that.setColumnType("imagePath", imagePathColumns);
+                                }
+                                this.pageBreak = true;
+                                this.dataPerPage = 1;
+                                /*if (pageBreak) {
+                                    that.setColumnType("pageBreak", pageBreak);
+                                    if(dataPerPage) {
+                                        that.setColumnType("dataPerPage", dataPerPage);
+                                    }
+                                }*/
+
+                                if (procStyle) {
+                                    let result = await callProcCursor(procStyle, params, param_extra, p_language, p_crt_by, _db2);
+                                    if (result) {
+                                        dataStyle = result;
+                                    }
+                                }
+                                if (!data) {
+                                    if (imageColumns) {
+                                        if (DB_CONNECTION == "oracle") {
+                                            oracledb.fetchAsBuffer = [oracledb.BLOB];
+                                        }
+                                    }
+
+                                    let result = await callProcCursor(proc, params, param_extra, p_language, p_crt_by, _db2);
+
+                                    if (result) {
+                                        data = result;
+                                    }
+
+                                    if(!!key) {
+                                        if(!!_details ) {
+                                            let tables = Object.keys(_details);
+                                            const promises = tables.map(async(x) => {
+                                                let obj = _details[x];
+                    
+                                                let proc2 = obj["proc"];
+                                                let param2 = obj["params"];
+                                                let param_extra2 = obj["param_extra"];
+                                                const startRow2 = obj["startRow"];
+                                                const subStyle2 = obj["subStyle"];
+                                                const totalStyle2 = obj["totalStyle"];
+
+
+
+                                                if (subStyle2) {
+                                                    that.setColumnType("subStyle", subStyle2);
+                                                }
+                                                if (totalStyle2) {
+                                                    that.setColumnType("totalStyle", totalStyle2);
+                                                }
+                    
+                                                let result2 = await callProcCursor(proc2, param2, param_extra2, p_language, p_crt_by, _db2);
+                    
+                                                if (result2) {
+                                                    _detailData[x] = { startRow: startRow2, data: result2 } ;
+                                                }
+                                            });
+                                            await Promise.all(promises);
+                                        }
+                                    }
+                                }
+
+                                that.insertRange2(range, data, dataStyle, _detailData, key);
+                            });
+
+                            await Promise.all(promises_insertRange2);
+                        }
+
+                        if (insertHeader) {
+                            let promises_insertHeader = insertHeader.map(async(r) => {
+                                const startRow = r["startRow"];
+                                const tempCol = r["column"];
+                                const mergeStyle = r["merge"];
+                                const proc = r["proc"];
+                                let params = r["params"];
+                                let param_extra = r["param_extra"];
+                                let data = r["data"];
+
+
+                                if (!data) {
+                                    if (imageColumns) {
+                                        if (DB_CONNECTION == "oracle") {
+                                            oracledb.fetchAsBuffer = [oracledb.BLOB];
+                                        }
+                                    }
+                                    let result = await callProcCursor(proc, params, param_extra, p_language, p_crt_by, _db2);
+
+                                    if (result) {
+                                        data = result;
+                                    }
+                                }
+                                await that.insertHeader(startRow, tempCol, data, mergeStyle);
+                            });
+
+                            await Promise.all(promises_insertHeader);
+                        }
+
+                        //insertRows: data type: array object [ {}, {} ]
+                        if (insertRows) {
+                            let next = true;
+                            let promises_insertRows = insertRows.map(async(r) => {
+                                if (next) {
+                                    const startRow = r["startRow"];
+                                    const proc = r["proc"];
+                                    let params = r["params"];
+                                    let param_extra = r["param_extra"];
+                                    let data = r["data"];
+                                    const dateColumns = r["dateColumns"];
+                                    const stringColumns = r["stringColumns"];
+                                    const imageColumns = r["imageColumns"];
+                                    const imagePathColumns = r["imagePathColumns"];
+                                    const sequenceType = r["sequence"];
+                                    const subStyle = r["subStyle"];
+                                    const totalStyle = r["totalStyle"];
+                                    const insBy = r["by"] ? r["by"] : "name";
+                                    const tempCol = r["column"];
+                                    const sumColumns = r["sumColumns"];
+
+                                    const total = r["total"];
+
+                                    if (dateColumns) {
+                                        that.setColumnType("date", dateColumns);
+                                    }
+                                    if (stringColumns) {
+                                        that.setColumnType("string", stringColumns);
+                                    }
+                                    if (imageColumns) {
+                                        that.setColumnType("image", imageColumns);
+                                    }
+                                    if (imagePathColumns) {
+                                        that.setColumnType("imagePath", imagePathColumns);
+                                    }
+                                    if (sequenceType) {
+                                        that.setColumnType("sequence", sequenceType);
+                                    }
+                                    if (subStyle) {
+                                        that.setColumnType("subStyle", subStyle);
+                                    }
+                                    if (totalStyle) {
+                                        that.setColumnType("totalStyle", totalStyle);
+                                    }
+                                    if (sumColumns) {
+                                        that.setColumnType("sumColumns", sumColumns);
+                                    }
+
+                                    if (!data) {
+                                        if (imageColumns) {
+                                            if (DB_CONNECTION == "oracle") {
+                                                oracledb.fetchAsBuffer = [oracledb.BLOB];
+                                            }
+                                        }
+                                        let result = await callProcCursor(proc, params,param_extra, p_language, p_crt_by);
+
+                                        if (result) {
+                                            data = result;
+                                        } else {
+                                            next = false;
+                                        }
+                                    }
+                                    if (!total) {
+                                        await that.insertRows(startRow, data, insBy, tempCol);
+                                    } else {
+                                        that.insertRowsWithTotal(startRow, data, total);
+                                    }
+                                }
+                            });
+
+                            await Promise.all(promises_insertRows).then((res) => {
+                                if (next) return 1;
+                                else return null;
+                            });
+                        }
+
+                        if (insertImages) {
+                            const rowAdded = insertImages["rowAdded"];
+                            const rowAdded2 = insertImages["rowAdded2"];
+                            const images = insertImages["images"];
+                            let tmpRowAdded = 0;
+                            if (!rowAdded) {
+                                const promises_rows = rowAdded2.map(async(r) => {
+                                    const proc = r["proc"];
+                                    let params = r["params"];
+                                    let param_extra = r["param_extra"];
+                                    let data = r["data"];
+                                    let multiple = r["multiple"] ? r["multiple"] : 1;
+
+                                    if (!data) {
+                                        let result = await callProcCursor(proc, params, param_extra, p_language, p_crt_by, _db2);
+                                        if (result) {
+                                            data = result;
+                                        } else {
+                                            data = [];
+                                        }
+                                    }
+
+                                    return (data.length - 1) * multiple;
+                                });
+
+                                tmpRowAdded = await Promise.all(promises_rows).then(
+                                    (values) => {
+                                        return values.reduce((a, b) => a + b);
+                                    }
+                                );
+                            } else {
+                                tmpRowAdded = rowAdded;
+                            }
+
+                            if (images) {
+                                let data = images["data"];
+                                const proc = images["proc"];
+                                let params = images["params"];
+                                let param_extra = images["param_extra"];
+
+                                if (!data) {
+                                    if (DB_CONNECTION == "oracle") {
+                                        oracledb.fetchAsBuffer = [oracledb.BLOB];
+                                    }
+
+                                    let result = await callProcCursor(proc, params, param_extra, p_language, p_crt_by, _db2);
+                                    if (result) {
+                                        data = result;
+                                    }
+                                }
+
+                                that.insertImages(data, tmpRowAdded);
+                            }
+                        }
+                        if (hideColumns) {
+                            that.setHideColumns(hideColumns, true);
+                        }
+                    });
+                    await Promise.all(promises);
+                }
+            }
+
+
+            rtnFile = await this.writeFile();
+
+
+            //create url
+            const current = new Date();
+            const year = current.getFullYear();
+            let month = current.getMonth() + 1;
+            let day = current.getDate()
+            if (day < 10) {
+                day = "0" + day
+            }
+            if (month < 10) {
+                month = "0" + month
+            }
+            const dir = ROOT_DIR_FILES + '/pdf/' + year + '/' + month
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true }, err => { console.log(err) })
+            }
+
+            const unixtime = Date.now();
+            const rtnFile2 = rtnFile.replace(/\\/g, '/');
+            const fileName = '/pdf/' + year + '/' + month + "/rpt-" + unixtime + "-" + (rtnFile2.split("/").pop());
+            const destinationFile = dir + "/rpt-" + unixtime + "-" + (rtnFile2.split("/").pop());
+            await Utils.copyFile(rtnFile, destinationFile);
+            let token = AES.encrypt(fileName + "|" + year + month + day, APP_KEY);
+            token = token.replace(/\+/g, 'p1L2u3S').replace(/\//g, 's1L2a3S4h').replace(/=/g, 'e1Q2u3A4l');
+
+            let url = APP_URL_LOCAL + "/api/dso/getfiletoken?file_name=" + fileName + "&token=" + token;
+            return url;
+
+        } catch (e) {
+            Utils.Logger({LVL: "error", MODULE: "ReportHelper", FUNC: "MakeReport", CONTENT: e.message, });
+            return null;
+        }
+    }
+
+}
+
+module.exports = ReportHelper
